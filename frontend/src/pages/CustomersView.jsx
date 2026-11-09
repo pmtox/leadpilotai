@@ -43,6 +43,7 @@ export default function CustomersView() {
                 <th style={{ padding: '12px 16px' }}>ID</th>
                 <th style={{ padding: '12px 16px' }}>Name</th>
                 <th style={{ padding: '12px 16px' }}>Phone</th>
+                <th style={{ padding: '12px 16px' }}>Email</th>
                 <th style={{ padding: '12px 16px' }}>Preferred Language</th>
                 <th style={{ padding: '12px 16px' }}>Calls / Sessions</th>
               </tr>
@@ -55,6 +56,7 @@ export default function CustomersView() {
                     <td style={{ padding: '12px 16px', fontWeight: '600', color: '#64748b' }}>#{c.id}</td>
                     <td style={{ padding: '12px 16px', fontWeight: '600', color: '#0f172a' }}>{c.name}</td>
                     <td style={{ padding: '12px 16px', color: '#334155' }}>{c.phone}</td>
+                    <td style={{ padding: '12px 16px', color: '#334155' }}>{c.email || '—'}</td>
                     <td style={{ padding: '12px 16px' }}>
                       <span style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: '10px', fontSize: '12px' }}>
                         {c.preferred_language || 'English'}

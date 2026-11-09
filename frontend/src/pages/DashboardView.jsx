@@ -131,7 +131,13 @@ export default function DashboardView({ onNavigateToCallCenter }) {
                   <td style={{ padding: '12px 16px', fontWeight: '600', color: '#64748b' }}>#{l.id}</td>
                   <td style={{ padding: '12px 16px', fontWeight: '600', color: '#0f172a' }}>{l.business_type || 'General'}</td>
                   <td style={{ padding: '12px 16px', color: '#166534', fontWeight: '600' }}>
-                    {l.budget ? `₹${l.budget.toLocaleString('en-IN')}` : '—'}
+                    {l.budget_min != null && l.budget_max != null
+                      ? l.budget_min === l.budget_max
+                        ? `₹${l.budget_min.toLocaleString('en-IN')}`
+                        : `₹${l.budget_min.toLocaleString('en-IN')}–₹${l.budget_max.toLocaleString('en-IN')}`
+                      : l.budget
+                        ? `₹${l.budget.toLocaleString('en-IN')}`
+                        : '—'}
                   </td>
                   <td style={{ padding: '12px 16px', color: '#334155' }}>{l.product_count ? `${l.product_count} items` : '—'}</td>
                   <td style={{ padding: '12px 16px', color: '#334155' }}>{l.timeline || '—'}</td>

@@ -46,6 +46,22 @@ export async function sendMessage(conversationId, message, language = 'English')
   return await res.json();
 }
 
+export async function sendAudioMessage(conversationId, audioBlob, filename, language = 'English') {
+  const formData = new FormData();
+  formData.append('file', audioBlob, filename);
+  formData.append('language', language);
+
+  const res = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/audio`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Audio request failed (HTTP ${res.status})`);
+  }
+  return await res.json();
+}
+
 export async function endConversation(conversationId) {
   const res = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/end`, {
     method: 'POST',
@@ -73,11 +89,16 @@ export async function fetchActions() {
   return await res.json();
 }
 
-export async function executeAction(actionId) {
+export async function executeAction(actionId, consentConfirmed = false) {
   const res = await fetch(`${API_BASE_URL}/api/actions/${actionId}/execute`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ consent_confirmed: consentConfirmed }),
   });
-  if (!res.ok) throw new Error('Failed to execute action');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || 'Failed to execute action');
+  }
   return await res.json();
 }
 
@@ -93,6 +114,7 @@ export default {
   createCustomer,
   startConversation,
   sendMessage,
+  sendAudioMessage,
   endConversation,
   fetchConversations,
   fetchLeads,

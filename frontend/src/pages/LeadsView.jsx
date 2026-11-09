@@ -84,7 +84,13 @@ export default function LeadsView() {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', fontSize: '13px', color: '#334155', backgroundColor: '#f8fafc', padding: '10px 14px', borderRadius: '6px' }}>
-                  <div><strong>Budget:</strong> {l.budget ? `₹${l.budget.toLocaleString('en-IN')}` : 'Not specified'}</div>
+                  <div><strong>Budget:</strong> {l.budget_min != null && l.budget_max != null
+                    ? l.budget_min === l.budget_max
+                      ? `₹${l.budget_min.toLocaleString('en-IN')}`
+                      : `₹${l.budget_min.toLocaleString('en-IN')}–₹${l.budget_max.toLocaleString('en-IN')}`
+                    : l.budget
+                      ? `₹${l.budget.toLocaleString('en-IN')}`
+                      : 'Not specified'}</div>
                   <div><strong>Catalog Size:</strong> {l.product_count ? `${l.product_count} items` : 'Not specified'}</div>
                   <div><strong>Timeline:</strong> {l.timeline || 'Not specified'}</div>
                   <div><strong>Buying Intent:</strong> {l.buying_intent}</div>

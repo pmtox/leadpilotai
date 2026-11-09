@@ -4,6 +4,7 @@ import {
   createCustomer,
   startConversation,
   sendMessage,
+  sendAudioMessage,
   endConversation
 } from './services/api';
 import { useVoice } from './hooks/useVoice';
@@ -22,6 +23,7 @@ function App() {
   // Call Center State
   const [customerName, setCustomerName] = useState('Priya Sharma');
   const [customerPhone, setCustomerPhone] = useState('+919876543210');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [language, setLanguage] = useState('English');
   const [conversation, setConversation] = useState(null);
   const [inputText, setInputText] = useState('');
@@ -31,18 +33,33 @@ function App() {
   // Voice Turn-Taking Hook
   const {
     isListening,
-    interimTranscript,
     startListening,
     stopListening,
     speak,
     voiceEnabled,
     toggleVoice,
-    isSpeaking
+    isSpeaking,
+    voiceError,
+    isSupported
   } = useVoice({
     language,
-    onTranscriptComplete: (text) => {
-      if (text && conversation?.status === 'active') {
-        submitMessage(text);
+    onAudioComplete: async (audio, filename, audioLanguage) => {
+      if (!conversation || conversation.status !== 'active') return;
+      setLoading(true);
+      try {
+        const updatedConversation = await sendAudioMessage(
+          conversation.id,
+          audio,
+          filename,
+          audioLanguage
+        );
+        setConversation(updatedConversation);
+        const latestMessage = updatedConversation.messages?.at(-1);
+        if (latestMessage?.speaker === 'agent' && voiceEnabled) {
+          speak(latestMessage.content, audioLanguage);
+        }
+      } finally {
+        setLoading(false);
       }
     }
   });
@@ -63,7 +80,7 @@ function App() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [conversation?.messages, interimTranscript]);
+  }, [conversation?.messages]);
 
   async function handleStartConversation(e) {
     e.preventDefault();
@@ -72,6 +89,7 @@ function App() {
       const cust = await createCustomer({
         name: customerName,
         phone: customerPhone,
+        email: customerEmail.trim() || null,
         preferred_language: language,
       });
 
@@ -241,7 +259,7 @@ function App() {
             <form onSubmit={handleStartConversation} style={{ backgroundColor: '#fafafa', padding: '24px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
               <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', color: '#1e293b' }}>Initiate Customer Interaction</h3>
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Customer Name</label>
                   <input
@@ -261,6 +279,19 @@ function App() {
                     required
                     style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
                   />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Email for automatic call summary (optional)</label>
+                  <input
+                    type="email"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    placeholder="customer@example.com"
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
+                  />
+                  <small style={{ display: 'block', marginTop: '5px', color: '#64748b', fontSize: '12px' }}>
+                    The recap is sent automatically when you end the conversation, if SMTP is configured.
+                  </small>
                 </div>
               </div>
 
@@ -371,13 +402,6 @@ function App() {
                       </div>
                     );
                   })}
-                  {isListening && interimTranscript && (
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
-                      <div style={{ backgroundColor: '#eff6ff', border: '1px dashed #3b82f6', borderRadius: '12px', padding: '8px 12px', fontSize: '13px', color: '#1d4ed8' }}>
-                        🎙️ Listening: "{interimTranscript}..."
-                      </div>
-                    </div>
-                  )}
                   {loading && (
                     <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '12px' }}>
                       <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '8px 12px', fontSize: '13px', color: '#64748b' }}>
@@ -394,8 +418,8 @@ function App() {
                       <button
                         type="button"
                         onClick={isListening ? stopListening : startListening}
-                        disabled={loading}
-                        title={isListening ? 'Click to stop listening' : 'Click to talk using microphone'}
+                        disabled={loading || !isSupported}
+                        title={!isSupported ? 'Use a current browser on localhost or HTTPS' : isListening ? 'Click to stop and submit recording' : 'Click to record a voice message'}
                         style={{
                           backgroundColor: isListening ? '#dc2626' : '#f1f5f9',
                           color: isListening ? '#ffffff' : '#1e293b',
@@ -407,7 +431,8 @@ function App() {
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontSize: '18px',
-                          cursor: 'pointer',
+                          cursor: loading || !isSupported ? 'not-allowed' : 'pointer',
+                          opacity: isSupported ? 1 : 0.55,
                           flexShrink: 0
                         }}
                       >
@@ -440,6 +465,16 @@ function App() {
                         Send
                       </button>
                     </form>
+                    {voiceError && (
+                      <div role="alert" style={{ marginTop: '8px', color: '#b91c1c', fontSize: '12px' }}>
+                        {voiceError}
+                      </div>
+                    )}
+                    {isListening && (
+                      <div style={{ marginTop: '8px', color: '#1d4ed8', fontSize: '12px' }}>
+                        Recording… Click stop to send for transcription.
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ padding: '12px', textAlign: 'center', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
@@ -506,7 +541,13 @@ function App() {
                     <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                       <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>BUDGET</div>
                       <div style={{ fontSize: '14px', fontWeight: '600', color: lead?.budget ? '#166534' : '#94a3b8', marginTop: '2px' }}>
-                        {lead?.budget ? `₹${lead.budget.toLocaleString('en-IN')}` : 'Unknown'}
+                        {lead?.budget_min != null && lead?.budget_max != null
+                          ? lead.budget_min === lead.budget_max
+                            ? `₹${lead.budget_min.toLocaleString('en-IN')}`
+                            : `₹${lead.budget_min.toLocaleString('en-IN')}–₹${lead.budget_max.toLocaleString('en-IN')}`
+                          : lead?.budget
+                            ? `₹${lead.budget.toLocaleString('en-IN')}`
+                            : 'Unknown'}
                       </div>
                     </div>
                   </div>

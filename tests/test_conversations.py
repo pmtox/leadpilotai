@@ -95,3 +95,4 @@ def test_customer_opt_out(setup_db):
     conv = conversation_service.start_conversation(db, customer_id=cust.id, initial_language="English")
     conv = conversation_service.process_turn(db, conv.id, "I am not interested right now, please stop.")
     assert "time" in conv.messages[-1].content.lower() or "reach back" in conv.messages[-1].content.lower()
+

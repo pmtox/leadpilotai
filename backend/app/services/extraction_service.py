@@ -1,5 +1,6 @@
 """Structured Information Extraction Service for LeadPilot AI.
 Extracts business type, product count, budget, timeline, features, and buying intent.
+Integrates with LeadScoringEngine for HOT/WARM/COLD qualification and follow-up drafts.
 """
 import re
 import json
@@ -8,12 +9,13 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from backend.app.models.conversation import Conversation, Message
 from backend.app.models.lead import Lead
+from backend.app.models.action import Action
 from backend.app.core.prompts import EXTRACTION_SYSTEM_PROMPT
 from backend.app.services.llm_service import llm_service
+from backend.app.services.lead_scoring import lead_scoring_engine
 
 logger = logging.getLogger(__name__)
 
-# Business domain keyword mappings (using stems for multilingual inflection)
 BUSINESS_TYPES = {
     "clothing": ["clothing", "cloth", "garment", "apparel", "fashion", "saree", "kurti", "t-shirt", "कपड़", "బట్ట"],
     "electronics": ["electronic", "gadget", "phone", "laptop", "mobile", "इलेक्ट्रॉनिक", "ఎలక్ట్రానిక్స్"],
@@ -26,7 +28,6 @@ BUSINESS_TYPES = {
     "handmade": ["handicraft", "handmade", "craft", "art", "हस्तशिल्प", "చేతివృత్తు"]
 }
 
-# Features keywords
 FEATURE_KEYWORDS = {
     "Online Payments (UPI/Cards)": ["payment", "upi", "razorpay", "card", "पेमेंट", "యూపీఐ", "చెల్లింపు"],
     "Delivery Tracking": ["delivery", "shipping", "tracking", "courier", "डिलीवरी", "డెలివరీ"],
@@ -37,7 +38,6 @@ FEATURE_KEYWORDS = {
 
 class ExtractionService:
     def extract_from_transcript(self, conversation_history: List[Dict[str, str]]) -> Dict[str, Any]:
-        """Extract structured fields using LLM if available, with deterministic NLP fallback."""
         customer_texts = [
             m.get("content", "")
             for m in conversation_history
@@ -45,7 +45,6 @@ class ExtractionService:
         ]
         full_customer_transcript = " ".join(customer_texts)
 
-        # 1. If live LLM is configured, try LLM extraction
         if llm_service.is_live_provider_available():
             try:
                 llm_extracted = self._extract_with_llm(conversation_history)
@@ -54,11 +53,9 @@ class ExtractionService:
             except Exception as e:
                 logger.warning(f"LLM extraction error: {e}. Falling back to rule extraction.")
 
-        # 2. Deterministic Regex and Entity rule extraction
         return self._extract_with_rules(full_customer_transcript)
 
     def _extract_with_llm(self, conversation_history: List[Dict[str, str]]) -> Optional[Dict[str, Any]]:
-        """Prompt LLM to extract JSON structure from dialogue history."""
         prompt = (
             f"{EXTRACTION_SYSTEM_PROMPT}\n\n"
             f"Conversation History:\n"
@@ -73,7 +70,6 @@ class ExtractionService:
         if not reply:
             return None
 
-        # Clean JSON markdown fences if present
         clean_json = re.sub(r"^```json\s*", "", reply.strip(), flags=re.MULTILINE)
         clean_json = re.sub(r"^```\s*", "", clean_json.strip(), flags=re.MULTILINE)
         clean_json = re.sub(r"```$", "", clean_json.strip(), flags=re.MULTILINE)
@@ -84,7 +80,6 @@ class ExtractionService:
             return None
 
     def _extract_with_rules(self, text: str) -> Dict[str, Any]:
-        """Deterministic NLP and Regex parser for English, Hindi, and Telugu inputs."""
         lower = text.lower()
         result: Dict[str, Any] = {
             "business_type": None,
@@ -103,7 +98,6 @@ class ExtractionService:
                 break
 
         # 2. Extract Product Count
-        # Matches e.g. "200 products", "around 150 items", "50 pieces", "300 skus", "100"
         prod_match = re.search(r"(\d+)\s*(?:products?|items?|articles?|pieces?|skus?|उत्पाद|वस्तुएं|వస్తువులు)?", lower)
         prod_specific = re.search(r"(\d+)\s*(?:products|items|skus|pieces|उत्पाद|वस्तु|వస్తువులు|వస్తు)", lower)
         if prod_specific:
@@ -115,17 +109,14 @@ class ExtractionService:
 
         # 3. Extract Budget
         budget_val = None
-        # Lakh pattern: "1.5 lakh", "1 లక్ష", "2 लाख"
         lakh_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:lakhs?|lac|लाख|लख|లక్ష)", lower)
         if lakh_match:
             budget_val = float(lakh_match.group(1)) * 100000
         else:
-            # Check 'k' pattern: "80k", "50 k"
             k_match = re.search(r"(?:₹|rs\.?|inr)?\s*(\d+)\s*k\b", lower)
             if k_match:
                 budget_val = float(k_match.group(1)) * 1000
             else:
-                # Direct currency amount: "₹80,000", "80,000", "rs 50000"
                 curr_match = re.search(r"(?:₹|rs\.?|inr|budget\s*is|बजट|బడ్జెట్)\s*[:=]?\s*(\d[\d,]*\d|\d+)", lower)
                 if curr_match:
                     num_str = curr_match.group(1).replace(",", "")
@@ -168,9 +159,13 @@ class ExtractionService:
         return result
 
     def _clean_extracted_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate and normalize LLM extracted dictionary."""
+        raw_biz = data.get("business_type")
+        cleaned_biz = None
+        if raw_biz:
+            cleaned_biz = re.sub(r"\s+(?:store|shop|business|boutique|dukan)\b", "", str(raw_biz), flags=re.I).strip().capitalize()
+
         return {
-            "business_type": str(data.get("business_type")).capitalize() if data.get("business_type") else None,
+            "business_type": cleaned_biz,
             "product_count": int(data.get("product_count")) if data.get("product_count") is not None else None,
             "budget": float(data.get("budget")) if data.get("budget") is not None else None,
             "timeline": str(data.get("timeline")) if data.get("timeline") else None,
@@ -180,12 +175,10 @@ class ExtractionService:
         }
 
     def extract_and_update_lead(self, db: Session, conversation_id: int) -> Optional[Lead]:
-        """Extract structured details from conversation turns and update/create Lead entity."""
         conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
         if not conv:
             return None
 
-        # Build turn history
         history = [
             {"speaker": m.speaker, "content": m.content, "language": m.language}
             for m in conv.messages
@@ -193,7 +186,6 @@ class ExtractionService:
 
         extracted = self.extract_from_transcript(history)
 
-        # Retrieve or create associated Lead
         lead = db.query(Lead).filter(Lead.conversation_id == conv.id).first()
         if not lead:
             lead = Lead(
@@ -202,7 +194,6 @@ class ExtractionService:
             )
             db.add(lead)
 
-        # Merge extracted fields (non-destructive update)
         if extracted.get("business_type"):
             lead.business_type = extracted["business_type"]
         if extracted.get("product_count"):
@@ -218,8 +209,53 @@ class ExtractionService:
         if extracted.get("buying_intent") and extracted["buying_intent"] != "UNKNOWN":
             lead.buying_intent = extracted["buying_intent"]
 
+        # Run Lead Qualification Engine
+        lead_dict = {
+            "business_type": lead.business_type,
+            "product_count": lead.product_count,
+            "budget": lead.budget,
+            "timeline": lead.timeline,
+            "features": lead.features,
+            "buying_intent": lead.buying_intent,
+        }
+        turn_count = len([m for m in conv.messages if m.speaker in ("customer", "user")])
+        score, classification, reason = lead_scoring_engine.calculate_score(lead_dict, turn_count=turn_count)
+        lead.score = score
+        lead.classification = classification
+        lead.qualification_reason = reason
+
+        # Generate Personalized Follow-up Draft
+        customer_name = conv.customer.name if conv.customer else "Valued Customer"
+        cust_lang = conv.customer.preferred_language if conv.customer else "English"
+        followup_msg = lead_scoring_engine.generate_followup_message(
+            customer_name=customer_name,
+            lead_data=lead_dict,
+            language=cust_lang
+        )
+
+        # Save/Update Action draft
+        action = db.query(Action).filter(
+            Action.conversation_id == conv.id,
+            Action.action_type == "whatsapp_followup"
+        ).first()
+
+        if not action:
+            action = Action(
+                customer_id=conv.customer_id,
+                conversation_id=conv.id,
+                action_type="whatsapp_followup",
+                payload={"message": followup_msg, "recipient": conv.customer.phone if conv.customer else "", "name": customer_name},
+                status="draft"
+            )
+            db.add(action)
+        else:
+            action.payload = {"message": followup_msg, "recipient": conv.customer.phone if conv.customer else "", "name": customer_name}
+
         db.commit()
         db.refresh(lead)
+
+        # Attach transient followup_draft for API serialization
+        setattr(lead, "followup_draft", followup_msg)
         return lead
 
 extraction_service = ExtractionService()

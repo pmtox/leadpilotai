@@ -12,6 +12,7 @@ class LeadBase(BaseModel):
     score: int = 0
     classification: str = "COLD"
     qualification_reason: Optional[str] = None
+    followup_draft: Optional[str] = None
 
 class LeadResponse(LeadBase):
     id: int

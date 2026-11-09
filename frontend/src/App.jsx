@@ -89,15 +89,29 @@ function App() {
 
   const lead = conversation?.lead;
 
+  // Lead qualification styling
+  const getBadgeStyle = (classification) => {
+    switch (classification) {
+      case 'HOT':
+        return { bg: '#dcfce7', text: '#15803d', border: '#86efac', label: '🔥 HOT LEAD' };
+      case 'WARM':
+        return { bg: '#fef3c7', text: '#b45309', border: '#fcd34d', label: '☀️ WARM LEAD' };
+      default:
+        return { bg: '#f1f5f9', text: '#475569', border: '#cbd5e1', label: '❄️ COLD LEAD' };
+    }
+  };
+
+  const badge = getBadgeStyle(lead?.classification);
+
   return (
-    <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: '1020px', margin: '20px auto', padding: '24px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+    <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: '1080px', margin: '20px auto', padding: '24px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
       {/* Header */}
       <header style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '16px', marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ margin: 0, color: '#0f172a', fontSize: '26px' }}>🚀 LeadPilot AI</h1>
           <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '14px' }}>Autonomous Multilingual AI Sales Agent</p>
         </div>
-        <div>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           {healthLoading ? (
             <span style={{ fontSize: '13px', color: '#64748b' }}>Checking backend...</span>
           ) : backendStatus?.status === 'healthy' ? (
@@ -113,8 +127,8 @@ function App() {
       </header>
 
       {/* Checkpoint Banner */}
-      <div style={{ backgroundColor: '#f1f5f9', borderLeft: '4px solid #10b981', padding: '12px 16px', borderRadius: '4px', marginBottom: '20px', fontSize: '14px', color: '#334155' }}>
-        <strong>Checkpoint CP-03: Structured Information Extraction</strong> — Live requirement parsing active (Budget, Product Count, Timeline, Features, Intent).
+      <div style={{ backgroundColor: '#f1f5f9', borderLeft: '4px solid #f59e0b', padding: '12px 16px', borderRadius: '4px', marginBottom: '20px', fontSize: '14px', color: '#334155' }}>
+        <strong>Checkpoint CP-04: Lead Qualification Engine</strong> — Live scoring (0–100), HOT/WARM/COLD status, and personalized follow-up generation active.
       </div>
 
       {/* Customer Setup Form (if no active conversation) */}
@@ -189,9 +203,9 @@ function App() {
         </form>
       ) : (
         /* 2-Column Layout: Chat on Left, Structured Lead Intelligence on Right */
-        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '20px' }}>
           {/* Chat Column */}
-          <div style={{ display: 'flex', flexDirection: 'column', height: '560px', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '620px', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
             <div style={{ backgroundColor: '#f8fafc', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <span style={{ fontWeight: '600', color: '#1e293b' }}>{customerName}</span>
@@ -247,7 +261,7 @@ function App() {
               {loading && (
                 <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '12px' }}>
                   <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '8px 12px', fontSize: '13px', color: '#64748b' }}>
-                    LeadPilot AI is thinking & extracting requirements...
+                    LeadPilot AI is thinking & qualifying lead...
                   </div>
                 </div>
               )}
@@ -293,72 +307,111 @@ function App() {
             )}
           </div>
 
-          {/* Right Column: Structured Lead Intelligence Card */}
-          <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div>
-              <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', color: '#0f172a' }}>📊 Live Lead Intelligence</h3>
-              <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Requirements extracted automatically from dialogue turns.</p>
+          {/* Right Column: Structured Lead Intelligence & Qualification Card */}
+          <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', maxHeight: '620px' }}>
+            {/* Qualification Status Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: badge.bg, border: `1px solid ${badge.border}`, padding: '10px 14px', borderRadius: '8px' }}>
+              <div>
+                <div style={{ fontSize: '11px', color: badge.text, fontWeight: '700', textTransform: 'uppercase' }}>LEAD QUALIFICATION</div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: badge.text }}>
+                  {badge.label}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '11px', color: badge.text, fontWeight: '600' }}>SCORE</div>
+                <div style={{ fontSize: '20px', fontWeight: '800', color: badge.text }}>
+                  {lead?.score || 0}<span style={{ fontSize: '12px', opacity: 0.8 }}>/100</span>
+                </div>
+              </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
-              <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>BUSINESS TYPE</div>
-                <div style={{ fontSize: '15px', fontWeight: '600', color: lead?.business_type ? '#0f172a' : '#94a3b8', marginTop: '2px' }}>
+            {/* Score Progress Bar */}
+            <div style={{ backgroundColor: '#e2e8f0', borderRadius: '6px', height: '8px', overflow: 'hidden' }}>
+              <div
+                style={{
+                  height: '100%',
+                  width: `${Math.min(100, Math.max(0, lead?.score || 0))}%`,
+                  backgroundColor: lead?.score >= 70 ? '#16a34a' : lead?.score >= 40 ? '#d97706' : '#64748b',
+                  transition: 'width 0.4s ease'
+                }}
+              />
+            </div>
+
+            {/* Qualification Explanation */}
+            {lead?.qualification_reason && (
+              <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '12px', color: '#334155', lineHeight: '1.4' }}>
+                <strong>Qualification Details:</strong> {lead.qualification_reason}
+              </div>
+            )}
+
+            {/* Extracted Details Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
+              <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>BUSINESS TYPE</div>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: lead?.business_type ? '#0f172a' : '#94a3b8', marginTop: '2px' }}>
                   {lead?.business_type || 'Unknown yet'}
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>PRODUCT COUNT</div>
-                  <div style={{ fontSize: '15px', fontWeight: '600', color: lead?.product_count ? '#0f172a' : '#94a3b8', marginTop: '2px' }}>
+                <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>PRODUCT COUNT</div>
+                  <div style={{ fontSize: '14px', fontWeight: '600', color: lead?.product_count ? '#0f172a' : '#94a3b8', marginTop: '2px' }}>
                     {lead?.product_count ? `${lead.product_count} items` : 'Unknown'}
                   </div>
                 </div>
 
-                <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>BUDGET</div>
-                  <div style={{ fontSize: '15px', fontWeight: '600', color: lead?.budget ? '#166534' : '#94a3b8', marginTop: '2px' }}>
+                <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>BUDGET</div>
+                  <div style={{ fontSize: '14px', fontWeight: '600', color: lead?.budget ? '#166534' : '#94a3b8', marginTop: '2px' }}>
                     {lead?.budget ? `₹${lead.budget.toLocaleString('en-IN')}` : 'Unknown'}
                   </div>
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>LAUNCH TIMELINE</div>
-                  <div style={{ fontSize: '14px', fontWeight: '500', color: lead?.timeline ? '#0f172a' : '#94a3b8', marginTop: '2px' }}>
+                <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>TIMELINE</div>
+                  <div style={{ fontSize: '13px', fontWeight: '500', color: lead?.timeline ? '#0f172a' : '#94a3b8', marginTop: '2px' }}>
                     {lead?.timeline || 'Unknown'}
                   </div>
                 </div>
 
-                <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>BUYING INTENT</div>
+                <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>INTENT</div>
                   <div style={{ fontSize: '13px', fontWeight: '700', marginTop: '2px', color: lead?.buying_intent === 'HIGH' ? '#166534' : lead?.buying_intent === 'MEDIUM' ? '#d97706' : '#64748b' }}>
                     {lead?.buying_intent || 'UNKNOWN'}
                   </div>
                 </div>
               </div>
 
-              <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '6px' }}>REQUIRED FEATURES</div>
+              <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>FEATURES</div>
                 {lead?.features && lead.features.length > 0 ? (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                     {lead.features.map((f, i) => (
-                      <span key={i} style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', fontSize: '12px', padding: '3px 8px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
+                      <span key={i} style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', fontSize: '11px', padding: '2px 7px', borderRadius: '10px', border: '1px solid #bfdbfe' }}>
                         ✓ {f}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <span style={{ fontSize: '13px', color: '#94a3b8' }}>None identified yet</span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>None identified</span>
                 )}
               </div>
             </div>
 
-            <div style={{ marginTop: 'auto', fontSize: '11px', color: '#64748b', backgroundColor: '#e2e8f0', padding: '8px 10px', borderRadius: '6px' }}>
-              🔒 Extracted entities persist securely in local SQLite <code>leads</code> table.
-            </div>
+            {/* Prepared Follow-up Message Draft */}
+            {lead?.followup_draft && (
+              <div style={{ backgroundColor: '#f0fdf4', padding: '12px', borderRadius: '6px', border: '1px solid #bbf7d0', marginTop: '4px' }}>
+                <div style={{ fontSize: '11px', color: '#166534', fontWeight: '700', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>💬</span> PREPARED FOLLOW-UP DRAFT (WHATSAPP)
+                </div>
+                <div style={{ fontSize: '12px', color: '#14532d', lineHeight: '1.4' }}>
+                  {lead.followup_draft}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

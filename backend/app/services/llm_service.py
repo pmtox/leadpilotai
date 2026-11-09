@@ -1,6 +1,7 @@
 """LLM Service supporting Gemini and Groq providers with graceful fallback and multilingual intelligence."""
 import os
 import json
+import time
 import logging
 import httpx
 from typing import List, Dict, Any, Optional
@@ -9,14 +10,14 @@ from backend.app.core.prompts import SALES_AGENT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
+# Track temporary provider rate-limiting / outage
+_rate_limited_until: Dict[str, float] = {}
+
 def detect_language(text: str, fallback_lang: str = "English") -> str:
     """Detect whether text is primarily Hindi, Telugu, or English."""
     if not text:
         return fallback_lang
-    
-    # Check Unicode ranges
-    # Devanagari: \u0900 - \u097F
-    # Telugu: \u0C00 - \u0C7F
+
     devanagari_count = sum(1 for c in text if '\u0900' <= c <= '\u097F')
     telugu_count = sum(1 for c in text if '\u0C00' <= c <= '\u0C7F')
 
@@ -24,8 +25,7 @@ def detect_language(text: str, fallback_lang: str = "English") -> str:
         return "Hindi"
     if telugu_count > 0:
         return "Telugu"
-    
-    # Check common romanized keywords
+
     lower = text.lower()
     hindi_keywords = ["namaste", "aapka", "kya", "chahiye", "dukan", "samaan", "rupaye", "karna", "hai", "mujhe", "kitna"]
     telugu_keywords = ["namaskaram", "meeru", "kavali", "ento", "undi", "cheyandi", "ela", "nenu", "entha", "avunu"]
@@ -38,21 +38,28 @@ def detect_language(text: str, fallback_lang: str = "English") -> str:
     return fallback_lang
 
 class LLMService:
-    def __init__(self):
-        self.provider = settings.DEFAULT_LLM_PROVIDER
-        self.gemini_key = settings.GEMINI_API_KEY
-        self.groq_key = settings.GROQ_API_KEY
-        self.model = settings.LLM_MODEL
+    @property
+    def provider(self) -> str:
+        return settings.DEFAULT_LLM_PROVIDER
+
+    @property
+    def gemini_key(self) -> str:
+        return settings.GEMINI_API_KEY
+
+    @property
+    def groq_key(self) -> str:
+        return settings.GROQ_API_KEY
+
+    @property
+    def gemini_model(self) -> str:
+        return settings.GEMINI_MODEL or "gemini-1.5-flash"
+
+    @property
+    def groq_model(self) -> str:
+        return settings.GROQ_MODEL or "llama-3.3-70b-versatile"
 
     def is_live_provider_available(self) -> bool:
-        """Check if a live LLM API key is present."""
-        if self.provider == "gemini" and self.gemini_key:
-            return True
-        if self.provider == "groq" and self.groq_key:
-            return True
-        if self.gemini_key or self.groq_key:
-            return True
-        return False
+        return bool(self.gemini_key or self.groq_key)
 
     def generate_reply(
         self,
@@ -60,36 +67,40 @@ class LLMService:
         language: str = "English",
         system_prompt: Optional[str] = None
     ) -> str:
-        """Generate conversational reply using configured LLM or intelligent fallback."""
         sys_prompt = system_prompt or SALES_AGENT_SYSTEM_PROMPT
+        now = time.time()
 
-        # 1. Try Google Gemini API if key is available
-        if self.gemini_key:
-            try:
-                reply = self._call_gemini(messages, language, sys_prompt)
-                if reply:
-                    return reply
-            except Exception as e:
-                logger.warning(f"Gemini API call failed: {e}. Falling back.")
+        # Try providers in order based on settings
+        providers = ["gemini", "groq"] if self.provider == "gemini" else ["groq", "gemini"]
 
-        # 2. Try Groq API if key is available
-        if self.groq_key:
-            try:
-                reply = self._call_groq(messages, language, sys_prompt)
-                if reply:
-                    return reply
-            except Exception as e:
-                logger.warning(f"Groq API call failed: {e}. Falling back.")
+        for prov in providers:
+            if prov == "gemini" and self.gemini_key:
+                if now < _rate_limited_until.get("gemini", 0):
+                    continue
+                try:
+                    reply = self._call_gemini(messages, language, sys_prompt)
+                    if reply:
+                        return reply
+                except Exception as e:
+                    logger.warning(f"Gemini API call failed: {e}. Falling back.")
 
-        # 3. Intelligent rule-based multilingual fallback
+            elif prov == "groq" and self.groq_key:
+                if now < _rate_limited_until.get("groq", 0):
+                    continue
+                try:
+                    reply = self._call_groq(messages, language, sys_prompt)
+                    if reply:
+                        return reply
+                except Exception as e:
+                    logger.warning(f"Groq API call failed: {e}. Falling back.")
+
+        # Intelligent rule-based multilingual fallback
         return self._intelligent_fallback_reply(messages, language)
 
     def _call_gemini(self, messages: List[Dict[str, str]], language: str, system_prompt: str) -> Optional[str]:
-        """Invoke Google Gemini REST API."""
-        model_name = self.model if "gemini" in self.model else "gemini-1.5-flash"
+        model_name = self.gemini_model
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.gemini_key}"
 
-        # Convert conversation messages to Gemini format
         gemini_contents = []
         for msg in messages:
             role = "user" if msg.get("speaker") in ("customer", "user") else "model"
@@ -109,7 +120,7 @@ class LLMService:
             }
         }
 
-        with httpx.Client(timeout=15.0) as client:
+        with httpx.Client(timeout=8.0) as client:
             resp = client.post(url, json=payload)
             if resp.status_code == 200:
                 data = resp.json()
@@ -118,12 +129,15 @@ class LLMService:
                     parts = candidates[0].get("content", {}).get("parts", [])
                     if parts:
                         return parts[0].get("text", "").strip()
+            elif resp.status_code == 429:
+                logger.warning("Gemini API 429 Quota Exceeded. Backing off for 60 seconds.")
+                _rate_limited_until["gemini"] = time.time() + 60.0
+                return None
             else:
                 logger.error(f"Gemini API returned status {resp.status_code}: {resp.text}")
                 return None
 
     def _call_groq(self, messages: List[Dict[str, str]], language: str, system_prompt: str) -> Optional[str]:
-        """Invoke Groq OpenAI-compatible API."""
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.groq_key}",
@@ -137,28 +151,34 @@ class LLMService:
             role = "user" if msg.get("speaker") in ("customer", "user") else "assistant"
             groq_messages.append({"role": role, "content": msg.get("content", "")})
 
-        model_name = "llama-3.3-70b-versatile" if "llama" not in self.model else self.model
+        # Ensure valid Groq model name
+        chosen_model = self.groq_model
+        if chosen_model == "openai/gpt-oss-120b":
+            chosen_model = "llama-3.3-70b-versatile"
+
         payload = {
-            "model": model_name,
+            "model": chosen_model,
             "messages": groq_messages,
             "temperature": 0.7,
             "max_tokens": 300
         }
 
-        with httpx.Client(timeout=15.0) as client:
+        with httpx.Client(timeout=8.0) as client:
             resp = client.post(url, headers=headers, json=payload)
             if resp.status_code == 200:
                 data = resp.json()
                 choices = data.get("choices", [])
                 if choices:
                     return choices[0].get("message", {}).get("content", "").strip()
+            elif resp.status_code == 429:
+                logger.warning("Groq API 429 Rate limit exceeded. Backing off for 30s.")
+                _rate_limited_until["groq"] = time.time() + 30.0
+                return None
             else:
                 logger.error(f"Groq API returned status {resp.status_code}: {resp.text}")
                 return None
 
     def _intelligent_fallback_reply(self, messages: List[Dict[str, str]], language: str) -> str:
-        """Intelligent contextual sales flow simulator for English, Hindi, and Telugu."""
-        # Find latest customer turn
         customer_msgs = [m for m in messages if m.get("speaker") in ("customer", "user")]
         latest_text = customer_msgs[-1].get("content", "") if customer_msgs else ""
         turn_count = len(customer_msgs)
@@ -166,7 +186,6 @@ class LLMService:
         detected_lang = detect_language(latest_text, fallback_lang=language)
         lower_input = latest_text.lower()
 
-        # Check for opt-out / stopping intent
         stop_keywords = ["stop", "not interested", "bye", "nahi chahiye", "baad me", "vaddu", "odhu"]
         if any(w in lower_input for w in stop_keywords):
             if detected_lang == "Hindi":
@@ -176,7 +195,6 @@ class LLMService:
             else:
                 return "Understood. Thank you so much for your time! Feel free to reach back out whenever you are ready."
 
-        # Consultative conversational flow based on turns
         if turn_count <= 1:
             if detected_lang == "Hindi":
                 return "बहुत बढ़िया! आपकी किस प्रकार की दुकान या व्यवसाय है? (जैसे कपड़े, इलेक्ट्रॉनिक्स, या किराने का सामान?)"

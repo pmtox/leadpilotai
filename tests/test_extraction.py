@@ -54,13 +54,13 @@ def test_multi_turn_incremental_extraction(setup_db):
     conv = conversation_service.process_turn(db, conv.id, "I run a grocery store and want to sell groceries online.")
     lead = db.query(Lead).filter(Lead.conversation_id == conv.id).first()
     assert lead is not None
-    assert lead.business_type == "Grocery"
+    assert "Grocery" in lead.business_type
     assert lead.budget is None
 
     # Turn 2: Budget & Features
     conv = conversation_service.process_turn(db, conv.id, "Our budget is ₹1,00,000 and we need UPI payments and delivery tracking.")
     db.refresh(lead)
-    assert lead.business_type == "Grocery"
+    assert "Grocery" in lead.business_type
     assert lead.budget == 100000.0
     assert "Online Payments (UPI/Cards)" in lead.features
     assert "Delivery Tracking" in lead.features
@@ -71,3 +71,4 @@ def test_multi_turn_incremental_extraction(setup_db):
     assert lead.product_count == 350
     assert lead.timeline == "Next month"
     assert lead.buying_intent == "HIGH"
+

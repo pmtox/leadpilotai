@@ -104,3 +104,5 @@ tmp/
 temp/
 scratch/
 
+# Local project task tracking
+PROJECT_TASKS.md

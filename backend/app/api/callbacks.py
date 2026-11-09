@@ -20,3 +20,4 @@ def list_callbacks(db: Session = Depends(get_db)):
         }
         for c in callbacks
     ]
+

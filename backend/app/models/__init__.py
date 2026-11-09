@@ -4,3 +4,4 @@ from backend.app.models.lead import Lead
 from backend.app.models.action import Action
 
 __all__ = ["Customer", "Conversation", "Message", "Lead", "Action"]
+

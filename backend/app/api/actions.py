@@ -33,3 +33,4 @@ def execute_action(action_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(action)
     return {"message": "Action marked as executed", "action_id": action.id, "status": action.status}
+

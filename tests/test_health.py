@@ -11,3 +11,4 @@ def test_health_check_endpoint():
     res = health_check()
     assert res["status"] == "healthy"
     assert res["database"] == "sqlite_connected"
+

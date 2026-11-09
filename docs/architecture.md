@@ -74,3 +74,4 @@ LeadPilotAI/
 4. **Structured Extraction**: Extracted requirements (budget, product count, timeline, features) saved to `leads` table.
 5. **Scoring & Classification**: Lead scored (0-100) and categorized into HOT, WARM, or COLD.
 6. **Action Dispatch**: WhatsApp follow-up or callback scheduled based on classification.
+

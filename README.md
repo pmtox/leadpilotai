@@ -47,3 +47,4 @@ All sensitive credentials, environment files (`.env`), API keys, SQLite database
 - **Current Milestone**: `CP-01` — Project Foundation [COMPLETED]
 - **Next Milestone**: `CP-02` — LLM Conversation Engine
 - See [PROJECT_TASKS.md](./PROJECT_TASKS.md) for real-time task progress and [LEADPILOT AI.docx](./LEADPILOT%20AI.docx) for the official project specification.
+

@@ -1,7 +1,10 @@
-import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import relationship
 from backend.app.database.base import Base
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 class Customer(Base):
     __tablename__ = "customers"
@@ -10,7 +13,7 @@ class Customer(Base):
     name = Column(String(100), nullable=False)
     phone = Column(String(30), nullable=False, index=True)
     preferred_language = Column(String(20), default="English")
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     conversations = relationship("Conversation", back_populates="customer", cascade="all, delete-orphan")
     leads = relationship("Lead", back_populates="customer", cascade="all, delete-orphan")

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from backend.app.models.conversation import Conversation, Message
 from backend.app.models.customer import Customer
 from backend.app.services.llm_service import llm_service, detect_language
+from backend.app.services.extraction_service import extraction_service
 
 GREETINGS = {
     "English": "Hello! I am LeadPilot AI. I understand you're looking to build an e-commerce website. Do you have a couple of minutes to discuss your requirements?",
@@ -95,8 +96,11 @@ class ConversationService:
         )
         db.add(agent_msg)
         db.commit()
-        db.refresh(conv)
 
+        # 5. Extract newly available structured requirements & update Lead
+        extraction_service.extract_and_update_lead(db, conv.id)
+
+        db.refresh(conv)
         return conv
 
     def end_conversation(self, db: Session, conversation_id: int) -> Conversation:
@@ -107,7 +111,6 @@ class ConversationService:
         conv.status = "completed"
         conv.ended_at = utc_now()
         if conv.started_at:
-            # Handle tz-aware or naive subtraction safely
             started = conv.started_at
             if started.tzinfo is None and conv.ended_at.tzinfo is not None:
                 started = started.replace(tzinfo=timezone.utc)

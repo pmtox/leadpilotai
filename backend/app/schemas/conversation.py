@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field, ConfigDict
+from backend.app.schemas.lead import LeadResponse
 
 class MessageBase(BaseModel):
     speaker: str
@@ -34,5 +35,6 @@ class ConversationResponse(BaseModel):
     duration: int
     summary: Optional[str] = None
     messages: List[MessageResponse] = []
+    lead: Optional[LeadResponse] = None
 
     model_config = ConfigDict(from_attributes=True)

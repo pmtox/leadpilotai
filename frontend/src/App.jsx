@@ -41,14 +41,12 @@ function App() {
     e.preventDefault();
     setLoading(true);
     try {
-      // 1. Create or register customer
       const cust = await createCustomer({
         name: customerName,
         phone: customerPhone,
         preferred_language: language,
       });
 
-      // 2. Start conversation
       const conv = await startConversation(cust.id, language);
       setConversation(conv);
     } catch (err) {
@@ -89,10 +87,12 @@ function App() {
     }
   }
 
+  const lead = conversation?.lead;
+
   return (
-    <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: '850px', margin: '30px auto', padding: '24px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+    <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: '1020px', margin: '20px auto', padding: '24px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
       {/* Header */}
-      <header style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '16px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <header style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '16px', marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ margin: 0, color: '#0f172a', fontSize: '26px' }}>🚀 LeadPilot AI</h1>
           <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '14px' }}>Autonomous Multilingual AI Sales Agent</p>
@@ -113,8 +113,8 @@ function App() {
       </header>
 
       {/* Checkpoint Banner */}
-      <div style={{ backgroundColor: '#f1f5f9', borderLeft: '4px solid #2563eb', padding: '12px 16px', borderRadius: '4px', marginBottom: '20px', fontSize: '14px', color: '#334155' }}>
-        <strong>Checkpoint CP-02: LLM Conversation Engine</strong> — Multilingual dialogue active in English, Hindi (हिंदी), and Telugu (తెలుగు).
+      <div style={{ backgroundColor: '#f1f5f9', borderLeft: '4px solid #10b981', padding: '12px 16px', borderRadius: '4px', marginBottom: '20px', fontSize: '14px', color: '#334155' }}>
+        <strong>Checkpoint CP-03: Structured Information Extraction</strong> — Live requirement parsing active (Budget, Product Count, Timeline, Features, Intent).
       </div>
 
       {/* Customer Setup Form (if no active conversation) */}
@@ -182,121 +182,184 @@ function App() {
               fontWeight: '600',
               fontSize: '14px',
               cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px'
             }}
           >
             {loading ? 'Starting...' : 'Start AI Sales Conversation →'}
           </button>
         </form>
       ) : (
-        /* Conversation Interface */
-        <div style={{ display: 'flex', flexDirection: 'column', height: '520px', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
-          {/* Chat Topbar */}
-          <div style={{ backgroundColor: '#f8fafc', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <span style={{ fontWeight: '600', color: '#1e293b' }}>{customerName}</span>
-              <span style={{ marginLeft: '8px', color: '#64748b', fontSize: '13px' }}>({language})</span>
-              <span style={{ marginLeft: '12px', fontSize: '12px', padding: '2px 8px', borderRadius: '10px', backgroundColor: conversation.status === 'active' ? '#dcfce7' : '#f1f5f9', color: conversation.status === 'active' ? '#166534' : '#64748b' }}>
-                {conversation.status.toUpperCase()}
-              </span>
-            </div>
-            {conversation.status === 'active' && (
-              <button
-                onClick={handleEndConversation}
-                disabled={loading}
-                style={{ padding: '6px 12px', backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
-              >
-                End Conversation
-              </button>
-            )}
-          </div>
-
-          {/* Messages Scroll Area */}
-          <div style={{ flex: 1, padding: '16px', overflowY: 'auto', backgroundColor: '#fbfcfd' }}>
-            {conversation.messages?.map((msg) => {
-              const isAgent = msg.speaker === 'agent';
-              return (
-                <div
-                  key={msg.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: isAgent ? 'flex-start' : 'flex-end',
-                    marginBottom: '12px',
-                  }}
+        /* 2-Column Layout: Chat on Left, Structured Lead Intelligence on Right */
+        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
+          {/* Chat Column */}
+          <div style={{ display: 'flex', flexDirection: 'column', height: '560px', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+            <div style={{ backgroundColor: '#f8fafc', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontWeight: '600', color: '#1e293b' }}>{customerName}</span>
+                <span style={{ marginLeft: '8px', color: '#64748b', fontSize: '13px' }}>({language})</span>
+                <span style={{ marginLeft: '10px', fontSize: '11px', padding: '2px 8px', borderRadius: '10px', backgroundColor: conversation.status === 'active' ? '#dcfce7' : '#f1f5f9', color: conversation.status === 'active' ? '#166534' : '#64748b' }}>
+                  {conversation.status.toUpperCase()}
+                </span>
+              </div>
+              {conversation.status === 'active' && (
+                <button
+                  onClick={handleEndConversation}
+                  disabled={loading}
+                  style={{ padding: '6px 10px', backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
                 >
+                  End Chat
+                </button>
+              )}
+            </div>
+
+            <div style={{ flex: 1, padding: '16px', overflowY: 'auto', backgroundColor: '#fbfcfd' }}>
+              {conversation.messages?.map((msg) => {
+                const isAgent = msg.speaker === 'agent';
+                return (
                   <div
+                    key={msg.id}
                     style={{
-                      maxWidth: '75%',
-                      padding: '10px 14px',
-                      borderRadius: isAgent ? '12px 12px 12px 2px' : '12px 12px 2px 12px',
-                      backgroundColor: isAgent ? '#ffffff' : '#2563eb',
-                      color: isAgent ? '#1e293b' : '#ffffff',
-                      border: isAgent ? '1px solid #e2e8f0' : 'none',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                      fontSize: '14px',
-                      lineHeight: '1.5'
+                      display: 'flex',
+                      justifyContent: isAgent ? 'flex-start' : 'flex-end',
+                      marginBottom: '12px',
                     }}
                   >
-                    <div style={{ fontSize: '11px', marginBottom: '4px', opacity: 0.7, fontWeight: '600' }}>
-                      {isAgent ? '🤖 LeadPilot AI' : `👤 ${customerName}`}
+                    <div
+                      style={{
+                        maxWidth: '82%',
+                        padding: '10px 14px',
+                        borderRadius: isAgent ? '12px 12px 12px 2px' : '12px 12px 2px 12px',
+                        backgroundColor: isAgent ? '#ffffff' : '#2563eb',
+                        color: isAgent ? '#1e293b' : '#ffffff',
+                        border: isAgent ? '1px solid #e2e8f0' : 'none',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                        fontSize: '14px',
+                        lineHeight: '1.5'
+                      }}
+                    >
+                      <div style={{ fontSize: '11px', marginBottom: '4px', opacity: 0.7, fontWeight: '600' }}>
+                        {isAgent ? '🤖 LeadPilot AI' : `👤 ${customerName}`}
+                      </div>
+                      {msg.content}
                     </div>
-                    {msg.content}
+                  </div>
+                );
+              })}
+              {loading && (
+                <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '12px' }}>
+                  <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '8px 12px', fontSize: '13px', color: '#64748b' }}>
+                    LeadPilot AI is thinking & extracting requirements...
                   </div>
                 </div>
-              );
-            })}
-            {loading && (
-              <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '12px' }}>
-                <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '8px 12px', fontSize: '13px', color: '#64748b' }}>
-                  LeadPilot AI is thinking...
-                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {conversation.status === 'active' ? (
+              <form onSubmit={handleSendMessage} style={{ display: 'flex', padding: '12px', backgroundColor: '#ffffff', borderTop: '1px solid #e2e8f0', gap: '8px' }}>
+                <input
+                  type="text"
+                  placeholder={language === 'Hindi' ? "उदा: 100 उत्पाद हैं और ₹70,000 बजट है..." : language === 'Telugu' ? "ఉదా: 100 ఉత్పత్తులు, ₹70,000 బడ్జెట్..." : "e.g. Online clothing store with 200 items, ₹80,000 budget..."}
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  disabled={loading}
+                  style={{ flex: 1, padding: '10px 14px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                />
+                <button
+                  type="submit"
+                  disabled={loading || !inputText.trim()}
+                  style={{
+                    backgroundColor: '#2563eb',
+                    color: '#ffffff',
+                    padding: '10px 18px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    cursor: loading || !inputText.trim() ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Send
+                </button>
+              </form>
+            ) : (
+              <div style={{ padding: '12px', textAlign: 'center', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+                <button
+                  onClick={() => setConversation(null)}
+                  style={{ padding: '8px 16px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  Start New Interaction
+                </button>
               </div>
             )}
-            <div ref={messagesEndRef} />
           </div>
 
-          {/* Input Turn Bar */}
-          {conversation.status === 'active' ? (
-            <form onSubmit={handleSendMessage} style={{ display: 'flex', padding: '12px', backgroundColor: '#ffffff', borderTop: '1px solid #e2e8f0', gap: '8px' }}>
-              <input
-                type="text"
-                placeholder={language === 'Hindi' ? "अपना संदेश यहाँ लिखें..." : language === 'Telugu' ? "మీ సందేశాన్ని ఇక్కడ టైప్ చేయండి..." : "Type your response as the customer..."}
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                disabled={loading}
-                style={{ flex: 1, padding: '10px 14px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
-              />
-              <button
-                type="submit"
-                disabled={loading || !inputText.trim()}
-                style={{
-                  backgroundColor: '#2563eb',
-                  color: '#ffffff',
-                  padding: '10px 18px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  fontWeight: '600',
-                  fontSize: '14px',
-                  cursor: loading || !inputText.trim() ? 'not-allowed' : 'pointer',
-                  opacity: loading || !inputText.trim() ? 0.6 : 1
-                }}
-              >
-                Send
-              </button>
-            </form>
-          ) : (
-            <div style={{ padding: '14px', textAlign: 'center', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
-              <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#64748b' }}>Conversation ended. Summary: {conversation.summary}</p>
-              <button
-                onClick={() => setConversation(null)}
-                style={{ padding: '8px 16px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
-              >
-                Start New Interaction
-              </button>
+          {/* Right Column: Structured Lead Intelligence Card */}
+          <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', color: '#0f172a' }}>📊 Live Lead Intelligence</h3>
+              <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Requirements extracted automatically from dialogue turns.</p>
             </div>
-          )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+              <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>BUSINESS TYPE</div>
+                <div style={{ fontSize: '15px', fontWeight: '600', color: lead?.business_type ? '#0f172a' : '#94a3b8', marginTop: '2px' }}>
+                  {lead?.business_type || 'Unknown yet'}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>PRODUCT COUNT</div>
+                  <div style={{ fontSize: '15px', fontWeight: '600', color: lead?.product_count ? '#0f172a' : '#94a3b8', marginTop: '2px' }}>
+                    {lead?.product_count ? `${lead.product_count} items` : 'Unknown'}
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>BUDGET</div>
+                  <div style={{ fontSize: '15px', fontWeight: '600', color: lead?.budget ? '#166534' : '#94a3b8', marginTop: '2px' }}>
+                    {lead?.budget ? `₹${lead.budget.toLocaleString('en-IN')}` : 'Unknown'}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>LAUNCH TIMELINE</div>
+                  <div style={{ fontSize: '14px', fontWeight: '500', color: lead?.timeline ? '#0f172a' : '#94a3b8', marginTop: '2px' }}>
+                    {lead?.timeline || 'Unknown'}
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>BUYING INTENT</div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', marginTop: '2px', color: lead?.buying_intent === 'HIGH' ? '#166534' : lead?.buying_intent === 'MEDIUM' ? '#d97706' : '#64748b' }}>
+                    {lead?.buying_intent || 'UNKNOWN'}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '6px' }}>REQUIRED FEATURES</div>
+                {lead?.features && lead.features.length > 0 ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {lead.features.map((f, i) => (
+                      <span key={i} style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', fontSize: '12px', padding: '3px 8px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
+                        ✓ {f}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span style={{ fontSize: '13px', color: '#94a3b8' }}>None identified yet</span>
+                )}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 'auto', fontSize: '11px', color: '#64748b', backgroundColor: '#e2e8f0', padding: '8px 10px', borderRadius: '6px' }}>
+              🔒 Extracted entities persist securely in local SQLite <code>leads</code> table.
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1,65 +1,69 @@
-# 🚀 LeadPilot AI
+# LeadPilot AI
 
-**Autonomous Multilingual AI Sales Agent** for e-commerce website qualification and consultative selling.
+LeadPilot AI is a multilingual sales-assistance app for e-commerce website projects. It helps teams talk with prospective customers, capture their requirements, qualify leads, and prepare follow-ups.
 
----
+## What it does
 
-## ⚡ Quick Start
+- Supports text and voice conversations in English, Hindi, and Telugu.
+- Collects business category, catalog size, budget, target launch date, and requested features.
+- Scores leads and organizes them in a CRM-style dashboard.
+- Creates written call recaps and can email them automatically when SMTP is configured.
+- Prepares WhatsApp follow-up drafts; sending requires customer opt-in.
+- Supports Gemini and Groq for AI-generated conversation replies, with local rule-based qualification and configurable request limits.
 
-### 1. Backend Setup
-```bash
-# Activate virtual environment
+## Technology
+
+- **Frontend:** React and Vite
+- **Backend:** Python, FastAPI, and SQLAlchemy
+- **Database:** SQLite by default
+- **AI providers:** Gemini and Groq
+
+## Run locally
+
+### Backend
+
+```powershell
 .\.venv\Scripts\activate
-
-# Install dependencies (if not already installed)
 pip install -r backend/requirements.txt
+Copy-Item backend\.env.example backend\.env
+```
 
-# Configure environment variables
-copy backend\.env.example backend\.env
-# Add your GEMINI_API_KEY or GROQ_API_KEY in backend/.env
-# To send recap emails, also configure the SMTP settings described below
+Add a Gemini or Groq API key to `backend/.env`, then start the API:
 
-# Run backend development server
+```powershell
 uvicorn backend.app.main:app --reload --port 8000
 ```
-Backend API will be available at `http://localhost:8000` with Swagger docs at `http://localhost:8000/docs`.
 
-### 2. Frontend Setup
-```bash
+The API is at `http://localhost:8000`; interactive API documentation is at `http://localhost:8000/docs`.
+
+### Frontend
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
-Frontend development server will be available at `http://localhost:5173`.
 
-### LLM usage controls
-Lead extraction uses local rules by default, avoiding an extra model request on each conversation turn. AI-generated replies are capped at 2 provider requests per conversation and 100 requests per day per running backend process. Adjust `LLM_MAX_CALLS_PER_CONVERSATION` and `LLM_MAX_CALLS_PER_DAY` in `backend/.env`; set either to `0` to disable those calls. Set `LLM_EXTRACTION_ENABLED=true` only if you want to opt back into model-based extraction. These in-process caps reset when the backend restarts and are not a hard billing limit; set usage quotas in the Gemini/Groq provider consoles for a hard cap.
+The frontend is at `http://localhost:5173`.
 
-### Automatic email recap delivery
-If an email is entered for the customer, the call summary is sent automatically when the conversation ends. Configure SMTP in `backend/.env`:
+## Configuration
+
+AI replies are limited to 2 provider requests per conversation and 100 requests per day per running backend process by default. Configure `LLM_MAX_CALLS_PER_CONVERSATION` and `LLM_MAX_CALLS_PER_DAY` in `backend/.env`. Rule-based lead extraction is enabled by default; optional model-based extraction can be enabled with `LLM_EXTRACTION_ENABLED=true`. These process-local limits reset when the backend restarts; use provider-side quotas for hard spending limits.
+
+To send call recaps automatically when a conversation ends, configure SMTP in `backend/.env`. For Gmail, use a Google App Password:
 
 ```env
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_USERNAME=your-sending-address@gmail.com
-SMTP_PASSWORD=your-provider-app-password
+SMTP_PASSWORD=your-google-app-password
 SMTP_FROM_EMAIL=your-sending-address@gmail.com
 ```
 
-For Gmail, use a Google App Password (not your regular account password). For another provider, use its SMTP hostname, port, and credentials. If SMTP is not configured or delivery fails, the recap is retained as a draft in the Action Center. Never put real credentials in `.env.example`.
+If SMTP is unavailable or delivery fails, the recap remains in the Action Center as a draft. Keep real API keys, passwords, customer data, and local environment files out of source control.
 
-### 3. Running Tests
-```bash
-.\.venv\Scripts\python.exe -m pytest tests/
+## Tests
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
 ```
-
----
-
-## 🔒 Confidentiality & Security
-All sensitive credentials, environment files (`.env`), API keys, SQLite databases (`*.db`), audio recordings, and customer conversation transcripts are strictly ignored by `.gitignore` and must never be committed to source control.
-
----
-
-## 📊 Sprint Status & Checkpoints
-- **Current Milestone**: `CP-01` — Project Foundation [COMPLETED]
-- **Next Milestone**: `CP-02` — LLM Conversation Engine

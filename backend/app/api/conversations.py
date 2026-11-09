@@ -1,5 +1,5 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from backend.app.database.connection import get_db
 from backend.app.models.conversation import Conversation
@@ -7,6 +7,7 @@ from backend.app.schemas.conversation import (
     ConversationStartRequest, MessageTurnRequest, ConversationResponse
 )
 from backend.app.services.conversation_service import conversation_service
+from backend.app.services.speech_service import speech_service
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -29,6 +30,32 @@ def send_message(conversation_id: int, turn: MessageTurnRequest, db: Session = D
             conversation_id=conversation_id,
             message_text=turn.message,
             language=turn.language
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@router.post("/{conversation_id}/audio", response_model=ConversationResponse)
+async def process_audio_turn(
+    conversation_id: int,
+    file: UploadFile = File(...),
+    language: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        audio_bytes = await file.read()
+        transcription = speech_service.transcribe_audio(
+            audio_bytes=audio_bytes,
+            filename=file.filename or "audio.wav",
+            language=language
+        )
+        if not transcription:
+            raise HTTPException(status_code=400, detail="Audio transcription failed")
+
+        return conversation_service.process_turn(
+            db=db,
+            conversation_id=conversation_id,
+            message_text=transcription,
+            language=language
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

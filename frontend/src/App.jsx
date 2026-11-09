@@ -6,6 +6,7 @@ import {
   sendMessage,
   endConversation
 } from './services/api';
+import { useVoice } from './hooks/useVoice';
 import './App.css';
 
 function App() {
@@ -18,6 +19,26 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [healthLoading, setHealthLoading] = useState(true);
   const messagesEndRef = useRef(null);
+
+  // Hook for voice turn-taking
+  const {
+    isListening,
+    interimTranscript,
+    startListening,
+    stopListening,
+    speak,
+    voiceEnabled,
+    toggleVoice,
+    isSpeaking,
+    isSupported: voiceSupported
+  } = useVoice({
+    language,
+    onTranscriptComplete: (text) => {
+      if (text && conversation?.status === 'active') {
+        submitMessage(text);
+      }
+    }
+  });
 
   useEffect(() => {
     async function verifyConnection() {
@@ -35,7 +56,7 @@ function App() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [conversation?.messages]);
+  }, [conversation?.messages, interimTranscript]);
 
   async function handleStartConversation(e) {
     e.preventDefault();
@@ -49,6 +70,12 @@ function App() {
 
       const conv = await startConversation(cust.id, language);
       setConversation(conv);
+
+      // Speak initial agent greeting if voice is enabled
+      const greetingMsg = conv.messages?.find(m => m.speaker === 'agent');
+      if (greetingMsg && voiceEnabled) {
+        speak(greetingMsg.content, language);
+      }
     } catch (err) {
       alert(`Error starting conversation: ${err.message}`);
     } finally {
@@ -56,22 +83,30 @@ function App() {
     }
   }
 
-  async function handleSendMessage(e) {
-    e.preventDefault();
-    if (!inputText.trim() || !conversation) return;
-
-    const text = inputText.trim();
+  async function submitMessage(text) {
+    if (!text.trim() || !conversation) return;
     setInputText('');
     setLoading(true);
 
     try {
-      const updatedConv = await sendMessage(conversation.id, text, language);
+      const updatedConv = await sendMessage(conversation.id, text.trim(), language);
       setConversation(updatedConv);
+
+      // Speak agent's latest response
+      const latestMsg = updatedConv.messages?.[updatedConv.messages.length - 1];
+      if (latestMsg && latestMsg.speaker === 'agent' && voiceEnabled) {
+        speak(latestMsg.content, language);
+      }
     } catch (err) {
       alert(`Error sending message: ${err.message}`);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSendMessage(e) {
+    e.preventDefault();
+    submitMessage(inputText);
   }
 
   async function handleEndConversation() {
@@ -80,6 +115,7 @@ function App() {
     try {
       const ended = await endConversation(conversation.id);
       setConversation(ended);
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
     } catch (err) {
       alert(`Error ending conversation: ${err.message}`);
     } finally {
@@ -104,14 +140,30 @@ function App() {
   const badge = getBadgeStyle(lead?.classification);
 
   return (
-    <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: '1080px', margin: '20px auto', padding: '24px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
-      {/* Header */}
-      <header style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '16px', marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: '1100px', margin: '20px auto', padding: '24px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+      {/* Top Header */}
+      <header style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '16px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ margin: 0, color: '#0f172a', fontSize: '26px' }}>🚀 LeadPilot AI</h1>
-          <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '14px' }}>Autonomous Multilingual AI Sales Agent</p>
+          <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '14px' }}>Autonomous Multilingual AI Voice Sales Agent</p>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            onClick={toggleVoice}
+            title={voiceEnabled ? 'Voice output enabled' : 'Voice output muted'}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '20px',
+              border: '1px solid #cbd5e1',
+              backgroundColor: voiceEnabled ? '#eff6ff' : '#f8fafc',
+              color: voiceEnabled ? '#2563eb' : '#64748b',
+              fontSize: '13px',
+              fontWeight: '600',
+              cursor: 'pointer'
+            }}
+          >
+            {voiceEnabled ? '🔊 Voice ON' : '🔇 Muted'}
+          </button>
           {healthLoading ? (
             <span style={{ fontSize: '13px', color: '#64748b' }}>Checking backend...</span>
           ) : backendStatus?.status === 'healthy' ? (
@@ -127,8 +179,15 @@ function App() {
       </header>
 
       {/* Checkpoint Banner */}
-      <div style={{ backgroundColor: '#f1f5f9', borderLeft: '4px solid #f59e0b', padding: '12px 16px', borderRadius: '4px', marginBottom: '20px', fontSize: '14px', color: '#334155' }}>
-        <strong>Checkpoint CP-04: Lead Qualification Engine</strong> — Live scoring (0–100), HOT/WARM/COLD status, and personalized follow-up generation active.
+      <div style={{ backgroundColor: '#f1f5f9', borderLeft: '4px solid #8b5cf6', padding: '12px 16px', borderRadius: '4px', marginBottom: '20px', fontSize: '14px', color: '#334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <strong>Checkpoint CP-05: Browser-Based Voice Engine</strong> — Real-time speech recognition (STT) & speech synthesis (TTS) in English, Hindi, and Telugu.
+        </div>
+        {isSpeaking && (
+          <span style={{ backgroundColor: '#ede9fe', color: '#6d28d9', padding: '2px 8px', borderRadius: '10px', fontSize: '12px', fontWeight: '600', animation: 'pulse 1.5s infinite' }}>
+            🔊 Agent Speaking...
+          </span>
+        )}
       </div>
 
       {/* Customer Setup Form (if no active conversation) */}
@@ -198,19 +257,19 @@ function App() {
               cursor: 'pointer',
             }}
           >
-            {loading ? 'Starting...' : 'Start AI Sales Conversation →'}
+            {loading ? 'Starting...' : 'Start Voice & Text AI Conversation →'}
           </button>
         </form>
       ) : (
-        /* 2-Column Layout: Chat on Left, Structured Lead Intelligence on Right */
-        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '20px' }}>
-          {/* Chat Column */}
-          <div style={{ display: 'flex', flexDirection: 'column', height: '620px', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+        /* 2-Column Layout: Live Call / Chat on Left, Lead Intelligence on Right */
+        <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: '20px' }}>
+          {/* Chat / Call Column */}
+          <div style={{ display: 'flex', flexDirection: 'column', height: '640px', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
             <div style={{ backgroundColor: '#f8fafc', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontWeight: '600', color: '#1e293b' }}>{customerName}</span>
-                <span style={{ marginLeft: '8px', color: '#64748b', fontSize: '13px' }}>({language})</span>
-                <span style={{ marginLeft: '10px', fontSize: '11px', padding: '2px 8px', borderRadius: '10px', backgroundColor: conversation.status === 'active' ? '#dcfce7' : '#f1f5f9', color: conversation.status === 'active' ? '#166534' : '#64748b' }}>
+                <span style={{ color: '#64748b', fontSize: '13px' }}>({language})</span>
+                <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', backgroundColor: conversation.status === 'active' ? '#dcfce7' : '#f1f5f9', color: conversation.status === 'active' ? '#166534' : '#64748b' }}>
                   {conversation.status.toUpperCase()}
                 </span>
               </div>
@@ -220,11 +279,12 @@ function App() {
                   disabled={loading}
                   style={{ padding: '6px 10px', backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
                 >
-                  End Chat
+                  End Call
                 </button>
               )}
             </div>
 
+            {/* Messages Scroll Area */}
             <div style={{ flex: 1, padding: '16px', overflowY: 'auto', backgroundColor: '#fbfcfd' }}>
               {conversation.messages?.map((msg) => {
                 const isAgent = msg.speaker === 'agent';
@@ -250,51 +310,102 @@ function App() {
                         lineHeight: '1.5'
                       }}
                     >
-                      <div style={{ fontSize: '11px', marginBottom: '4px', opacity: 0.7, fontWeight: '600' }}>
-                        {isAgent ? '🤖 LeadPilot AI' : `👤 ${customerName}`}
+                      <div style={{ fontSize: '11px', marginBottom: '4px', opacity: 0.7, fontWeight: '600', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>{isAgent ? '🤖 LeadPilot AI' : `👤 ${customerName}`}</span>
+                        {isAgent && voiceEnabled && (
+                          <button
+                            onClick={() => speak(msg.content, language)}
+                            title="Replay Voice"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '12px', color: '#64748b' }}
+                          >
+                            🔊
+                          </button>
+                        )}
                       </div>
                       {msg.content}
                     </div>
                   </div>
                 );
               })}
+              {isListening && interimTranscript && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+                  <div style={{ backgroundColor: '#eff6ff', border: '1px dashed #3b82f6', borderRadius: '12px', padding: '8px 12px', fontSize: '13px', color: '#1d4ed8' }}>
+                    🎙️ Listening: "{interimTranscript}..."
+                  </div>
+                </div>
+              )}
               {loading && (
                 <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '12px' }}>
                   <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '8px 12px', fontSize: '13px', color: '#64748b' }}>
-                    LeadPilot AI is thinking & qualifying lead...
+                    LeadPilot AI is thinking...
                   </div>
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Input & Microphone Voice Controls */}
             {conversation.status === 'active' ? (
-              <form onSubmit={handleSendMessage} style={{ display: 'flex', padding: '12px', backgroundColor: '#ffffff', borderTop: '1px solid #e2e8f0', gap: '8px' }}>
-                <input
-                  type="text"
-                  placeholder={language === 'Hindi' ? "उदा: 100 उत्पाद हैं और ₹70,000 बजट है..." : language === 'Telugu' ? "ఉదా: 100 ఉత్పత్తులు, ₹70,000 బడ్జెట్..." : "e.g. Online clothing store with 200 items, ₹80,000 budget..."}
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  disabled={loading}
-                  style={{ flex: 1, padding: '10px 14px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
-                />
-                <button
-                  type="submit"
-                  disabled={loading || !inputText.trim()}
-                  style={{
-                    backgroundColor: '#2563eb',
-                    color: '#ffffff',
-                    padding: '10px 18px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    fontWeight: '600',
-                    fontSize: '14px',
-                    cursor: loading || !inputText.trim() ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  Send
-                </button>
-              </form>
+              <div style={{ backgroundColor: '#ffffff', borderTop: '1px solid #e2e8f0', padding: '12px' }}>
+                <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {/* Microphone Voice Button */}
+                  <button
+                    type="button"
+                    onClick={isListening ? stopListening : startListening}
+                    disabled={loading}
+                    title={isListening ? 'Click to stop listening' : 'Click to talk using microphone'}
+                    style={{
+                      backgroundColor: isListening ? '#dc2626' : '#f1f5f9',
+                      color: isListening ? '#ffffff' : '#1e293b',
+                      border: isListening ? 'none' : '1px solid #cbd5e1',
+                      borderRadius: '50%',
+                      width: '42px',
+                      height: '42px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '18px',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      animation: isListening ? 'pulse 1s infinite' : 'none'
+                    }}
+                  >
+                    {isListening ? '⏹️' : '🎙️'}
+                  </button>
+
+                  <input
+                    type="text"
+                    placeholder={isListening ? "Listening to your voice..." : language === 'Hindi' ? "बोलें या यहाँ टाइप करें..." : language === 'Telugu' ? "మాట్లాడండి లేదా టైప్ చేయండి..." : "Speak into mic or type your turn..."}
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    disabled={loading}
+                    style={{ flex: 1, padding: '10px 14px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={loading || !inputText.trim()}
+                    style={{
+                      backgroundColor: '#2563eb',
+                      color: '#ffffff',
+                      padding: '10px 18px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontWeight: '600',
+                      fontSize: '14px',
+                      cursor: loading || !inputText.trim() ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Send
+                  </button>
+                </form>
+                {isListening && (
+                  <div style={{ marginTop: '8px', fontSize: '12px', color: '#dc2626', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ display: 'inline-block', width: '8px', height: '8px', backgroundColor: '#dc2626', borderRadius: '50%' }}></span>
+                    Microphone is live in {language} — speak now and pause to send automatically.
+                  </div>
+                )}
+              </div>
             ) : (
               <div style={{ padding: '12px', textAlign: 'center', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
                 <button
@@ -307,9 +418,8 @@ function App() {
             )}
           </div>
 
-          {/* Right Column: Structured Lead Intelligence & Qualification Card */}
-          <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', maxHeight: '620px' }}>
-            {/* Qualification Status Header */}
+          {/* Right Column: Lead Qualification & Real-Time Intelligence */}
+          <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', maxHeight: '640px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: badge.bg, border: `1px solid ${badge.border}`, padding: '10px 14px', borderRadius: '8px' }}>
               <div>
                 <div style={{ fontSize: '11px', color: badge.text, fontWeight: '700', textTransform: 'uppercase' }}>LEAD QUALIFICATION</div>
@@ -325,7 +435,6 @@ function App() {
               </div>
             </div>
 
-            {/* Score Progress Bar */}
             <div style={{ backgroundColor: '#e2e8f0', borderRadius: '6px', height: '8px', overflow: 'hidden' }}>
               <div
                 style={{
@@ -337,14 +446,12 @@ function App() {
               />
             </div>
 
-            {/* Qualification Explanation */}
             {lead?.qualification_reason && (
               <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '12px', color: '#334155', lineHeight: '1.4' }}>
                 <strong>Qualification Details:</strong> {lead.qualification_reason}
               </div>
             )}
 
-            {/* Extracted Details Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
               <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>BUSINESS TYPE</div>
@@ -378,7 +485,7 @@ function App() {
                 </div>
 
                 <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>INTENT</div>
+                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>BUYING INTENT</div>
                   <div style={{ fontSize: '13px', fontWeight: '700', marginTop: '2px', color: lead?.buying_intent === 'HIGH' ? '#166534' : lead?.buying_intent === 'MEDIUM' ? '#d97706' : '#64748b' }}>
                     {lead?.buying_intent || 'UNKNOWN'}
                   </div>
@@ -386,7 +493,7 @@ function App() {
               </div>
 
               <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>FEATURES</div>
+                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>REQUIRED FEATURES</div>
                 {lead?.features && lead.features.length > 0 ? (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                     {lead.features.map((f, i) => (
@@ -396,12 +503,11 @@ function App() {
                     ))}
                   </div>
                 ) : (
-                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>None identified</span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>None identified yet</span>
                 )}
               </div>
             </div>
 
-            {/* Prepared Follow-up Message Draft */}
             {lead?.followup_draft && (
               <div style={{ backgroundColor: '#f0fdf4', padding: '12px', borderRadius: '6px', border: '1px solid #bbf7d0', marginTop: '4px' }}>
                 <div style={{ fontSize: '11px', color: '#166534', fontWeight: '700', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>

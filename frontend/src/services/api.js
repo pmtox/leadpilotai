@@ -55,6 +55,38 @@ export async function endConversation(conversationId) {
   return await res.json();
 }
 
+export async function fetchConversations() {
+  const res = await fetch(`${API_BASE_URL}/api/conversations`);
+  if (!res.ok) throw new Error('Failed to fetch conversations');
+  return await res.json();
+}
+
+export async function fetchLeads() {
+  const res = await fetch(`${API_BASE_URL}/api/leads`);
+  if (!res.ok) throw new Error('Failed to fetch leads');
+  return await res.json();
+}
+
+export async function fetchActions() {
+  const res = await fetch(`${API_BASE_URL}/api/actions`);
+  if (!res.ok) throw new Error('Failed to fetch actions');
+  return await res.json();
+}
+
+export async function executeAction(actionId) {
+  const res = await fetch(`${API_BASE_URL}/api/actions/${actionId}/execute`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error('Failed to execute action');
+  return await res.json();
+}
+
+export async function fetchCallbacks() {
+  const res = await fetch(`${API_BASE_URL}/api/callbacks`);
+  if (!res.ok) throw new Error('Failed to fetch callbacks');
+  return await res.json();
+}
+
 export default {
   checkBackendHealth,
   fetchCustomers,
@@ -62,4 +94,9 @@ export default {
   startConversation,
   sendMessage,
   endConversation,
+  fetchConversations,
+  fetchLeads,
+  fetchActions,
+  executeAction,
+  fetchCallbacks,
 };

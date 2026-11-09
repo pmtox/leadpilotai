@@ -6,6 +6,8 @@ class LeadBase(BaseModel):
     business_type: Optional[str] = None
     product_count: Optional[int] = None
     budget: Optional[float] = None
+    budget_min: Optional[float] = None
+    budget_max: Optional[float] = None
     timeline: Optional[str] = None
     features: List[str] = []
     buying_intent: Optional[str] = "UNKNOWN"

@@ -1,6 +1,7 @@
-"""Speech Service handling Speech-to-Text (STT) via Groq Whisper and fallback transcription."""
+"""Speech Service handling Speech-to-Text (STT) via Groq Whisper."""
 import io
 import logging
+import mimetypes
 import httpx
 from typing import Optional
 from backend.app.core.config import settings
@@ -12,17 +13,23 @@ class SpeechService:
         self.groq_key = settings.GROQ_API_KEY
 
     def transcribe_audio(self, audio_bytes: bytes, filename: str = "audio.wav", language: Optional[str] = None) -> str:
-        """Transcribe audio bytes using Groq Whisper API with graceful fallback."""
-        if self.groq_key:
-            try:
-                transcript = self._call_groq_whisper(audio_bytes, filename, language)
-                if transcript:
-                    return transcript
-            except Exception as e:
-                logger.warning(f"Groq Whisper transcription failed: {e}. Using fallback.")
+        """Transcribe audio bytes with Groq Whisper; raise an explicit error on failure."""
+        if not audio_bytes:
+            raise ValueError("No audio data was received")
+        if not self.groq_key:
+            raise RuntimeError("Groq API key is not configured for audio transcription")
 
-        # Default fallback transcription for testing / offline demo
-        return "I want to build an e-commerce clothing store with 200 products and ₹80,000 budget."
+        try:
+            transcript = self._call_groq_whisper(audio_bytes, filename, language)
+        except Exception as exc:
+            logger.exception("Groq Whisper transcription failed")
+            raise RuntimeError("Audio transcription service failed. Check the Groq API key and try again.") from exc
+
+        if transcript is None:
+            raise RuntimeError("Groq Whisper returned no transcript. Check model access and audio format.")
+        if not transcript.strip():
+            raise RuntimeError("No speech was recognized. Try recording again in a quieter place.")
+        return transcript.strip()
 
     def _call_groq_whisper(self, audio_bytes: bytes, filename: str, language: Optional[str]) -> Optional[str]:
         url = "https://api.groq.com/openai/v1/audio/transcriptions"
@@ -42,7 +49,11 @@ class SpeechService:
                 lang_code = "en"
 
         files = {
-            "file": (filename, io.BytesIO(audio_bytes), "audio/wav")
+            "file": (
+                filename,
+                io.BytesIO(audio_bytes),
+                mimetypes.guess_type(filename)[0] or "application/octet-stream",
+            )
         }
         data = {
             "model": "whisper-large-v3",
@@ -58,6 +69,6 @@ class SpeechService:
                 return result.get("text", "").strip()
             else:
                 logger.error(f"Groq Whisper returned status {resp.status_code}: {resp.text}")
-                return None
+                raise RuntimeError(f"Groq Whisper returned HTTP {resp.status_code}")
 
 speech_service = SpeechService()

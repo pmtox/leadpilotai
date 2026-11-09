@@ -109,3 +109,4 @@ def test_lead_qualification_end_to_end(setup_db):
     assert action.action_type == "whatsapp_followup"
     assert action.status == "draft"
     assert "Ananya" in action.payload.get("message", "")
+

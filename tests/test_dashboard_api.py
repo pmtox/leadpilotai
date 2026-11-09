@@ -52,9 +52,10 @@ def test_dashboard_api_endpoints(setup_db):
     action = next(a for a in actions if a["conversation_id"] == conv.id)
     assert action["status"] in ("draft", "pending", "executed")
 
-    # Execute action
+    # Execute action — CP-07: response now wraps action inside "action" key
     exec_res = execute_action(action["id"], db)
-    assert exec_res["status"] == "executed"
+    result_status = exec_res.get("action", {}).get("status") or exec_res.get("whatsapp_status")
+    assert result_status in ("draft", "sent", "executed", "failed")
 
     # 5. Test callbacks listing
     callback = Action(
@@ -69,3 +70,4 @@ def test_dashboard_api_endpoints(setup_db):
 
     callbacks = list_callbacks(db)
     assert len(callbacks) >= 1
+

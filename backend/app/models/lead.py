@@ -15,6 +15,8 @@ class Lead(Base):
     business_type = Column(String(100), nullable=True)
     product_count = Column(Integer, nullable=True)
     budget = Column(Float, nullable=True)
+    budget_min = Column(Float, nullable=True)
+    budget_max = Column(Float, nullable=True)
     timeline = Column(String(100), nullable=True)
     features = Column(JSON, default=list)
     buying_intent = Column(String(20), default="UNKNOWN")

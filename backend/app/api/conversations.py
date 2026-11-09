@@ -43,6 +43,8 @@ async def process_audio_turn(
 ):
     try:
         audio_bytes = await file.read()
+        if not audio_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded audio file is empty")
         transcription = speech_service.transcribe_audio(
             audio_bytes=audio_bytes,
             filename=file.filename or "audio.wav",
@@ -59,6 +61,8 @@ async def process_audio_turn(
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 @router.get("/{conversation_id}", response_model=ConversationResponse)
 def get_conversation(conversation_id: int, db: Session = Depends(get_db)):

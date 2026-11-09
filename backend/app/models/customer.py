@@ -12,6 +12,7 @@ class Customer(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     phone = Column(String(30), nullable=False, index=True)
+    email = Column(String(254), nullable=True)
     preferred_language = Column(String(20), default="English")
     created_at = Column(DateTime, default=utc_now)
 

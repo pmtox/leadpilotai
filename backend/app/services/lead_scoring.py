@@ -25,18 +25,25 @@ class LeadScoringEngine:
 
         # 2. Budget Readiness (Max 25 pts)
         budget = lead_data.get("budget")
+        budget_min = lead_data.get("budget_min")
+        budget_max = lead_data.get("budget_max")
+        budget_label = (
+            f"₹{budget_min:,.0f}–₹{budget_max:,.0f}"
+            if budget_min is not None and budget_max is not None and budget_min != budget_max
+            else f"₹{int(budget):,}" if budget is not None else None
+        )
         if budget is not None and budget >= 50000:
             score += 25
-            reasons.append(f"Strong budget (₹{int(budget):,})")
+            reasons.append(f"Strong budget ({budget_label})")
         elif budget is not None and budget > 0:
             score += 15
-            reasons.append(f"Modest budget (₹{int(budget):,})")
+            reasons.append(f"Modest budget ({budget_label})")
         else:
             reasons.append("Budget not yet determined")
 
         # 3. Timeline Readiness (Max 20 pts)
         timeline = (lead_data.get("timeline") or "").lower()
-        if any(t in timeline for t in ["immediately", "2 weeks", "urgent", "two weeks"]):
+        if any(t in timeline for t in ["immediately", "next week", "2 weeks", "urgent", "two weeks"]):
             score += 20
             reasons.append("Immediate/Short launch timeline")
         elif any(t in timeline for t in ["next month", "1 month", "this month"]):
@@ -93,16 +100,22 @@ class LeadScoringEngine:
         biz = lead_data.get("business_type") or "e-commerce"
         prods = lead_data.get("product_count")
         budget = lead_data.get("budget")
+        budget_min = lead_data.get("budget_min")
+        budget_max = lead_data.get("budget_max")
         features = lead_data.get("features") or []
         timeline = lead_data.get("timeline") or "your target timeline"
 
         feat_str = ", ".join(features) if features else "payment gateway and order management"
         prod_str = f"with around {prods} products" if prods else ""
-        budget_str = f"within your estimated budget of ₹{int(budget):,}" if budget else "tailored to your budget"
+        if budget_min is not None and budget_max is not None and budget_min != budget_max:
+            budget_display = f"₹{budget_min:,.0f}–₹{budget_max:,.0f}"
+        else:
+            budget_display = f"₹{int(budget):,}" if budget else None
+        budget_str = f"within your estimated budget of {budget_display}" if budget_display else "tailored to your budget"
 
         if language == "Hindi":
             hindi_prod = f"{prods} उत्पादों" if prods else "आपके उत्पादों"
-            hindi_budget = f"₹{int(budget):,} के बजट में" if budget else "आपके बजट अनुसार"
+            hindi_budget = f"{budget_display} के बजट में" if budget_display else "आपके बजट अनुसार"
             return (
                 f"नमस्ते {customer_name}! LeadPilot AI से जुड़ने के लिए धन्यवाद। "
                 f"हमने आपके {biz} व्यवसाय के लिए {hindi_prod} और {feat_str} के साथ ऑनलाइन स्टोर का प्रस्ताव तैयार किया है, "
@@ -110,7 +123,7 @@ class LeadScoringEngine:
             )
         elif language == "Telugu":
             telugu_prod = f"{prods} ఉత్పత్తులతో" if prods else "మీ ఉత్పత్తులతో"
-            telugu_budget = f"₹{int(budget):,} బడ్జెట్‌లో" if budget else "మీ బడ్జెట్‌కు అనుగుణంగా"
+            telugu_budget = f"{budget_display} బడ్జెట్‌లో" if budget_display else "మీ బడ్జెట్‌కు అనుగుణంగా"
             return (
                 f"నమస్కారం {customer_name}! LeadPilot AI తో సంప్రదించినందుకు ధన్యవాదాలు. "
                 f"మీ {biz} వ్యాపారం కోసం {telugu_prod} మరియు {feat_str} ఫీచర్లతో ఆన్‌లైన్ స్టోర్ ప్రతిపాదన సిద్ధంగా ఉంది ({telugu_budget}). "

@@ -4,8 +4,10 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from backend.app.models.conversation import Conversation, Message
 from backend.app.models.customer import Customer
+from backend.app.models.action import Action
 from backend.app.services.llm_service import llm_service, detect_language
 from backend.app.services.extraction_service import extraction_service
+from backend.app.services.email_service import email_service
 
 GREETINGS = {
     "English": "Hello! I am LeadPilot AI. I understand you're looking to build an e-commerce website. Do you have a couple of minutes to discuss your requirements?",
@@ -80,11 +82,24 @@ class ConversationService:
             for m in db_messages
         ]
 
-        # 3. Generate context-aware sales reply from LLM
-        agent_reply_text = llm_service.generate_reply(
-            messages=history,
-            language=detected_lang
+        # Keep requirement gathering deterministic so the agent asks for only
+        # the next missing field instead of inventing details or recap content.
+        requirements = extraction_service.extract_rules_from_history(history)
+        next_question = llm_service._next_missing_requirement_question(
+            requirements,
+            detected_lang,
         )
+        if next_question:
+            agent_reply_text = llm_service._intelligent_fallback_reply(
+                history,
+                detected_lang,
+            )
+        else:
+            agent_reply_text = llm_service.generate_reply(
+                messages=history,
+                language=detected_lang,
+                conversation_id=conv.id,
+            )
 
         # 4. Save agent turn to DB
         agent_msg = Message(
@@ -119,6 +134,31 @@ class ConversationService:
         turn_count = len(conv.messages)
         conv.summary = f"Conversation completed with {turn_count} turns recorded."
         db.commit()
+
+        # Refresh the recap with the complete transcript, then send it if an
+        # email address was supplied. EmailService retains a draft if SMTP is
+        # unavailable or delivery fails.
+        extraction_service.extract_and_update_lead(db, conv.id)
+        email_action = db.query(Action).filter(
+            Action.conversation_id == conv.id,
+            Action.action_type == "email_followup",
+        ).first()
+        if email_action and email_action.status in ("draft", "pending"):
+            payload = dict(email_action.payload or {})
+            result = email_service.send_email(
+                recipient=payload.get("recipient"),
+                subject=payload.get("subject", "Your project discussion summary"),
+                body=payload.get("message", ""),
+                consent_confirmed=True,
+            )
+            email_action.status = result["status"]
+            payload["email_delivery_status"] = result["status"]
+            payload["delivery_message"] = result["message"]
+            email_action.payload = payload
+            if result["status"] == "sent":
+                email_action.executed_at = utc_now()
+            db.commit()
+
         db.refresh(conv)
         return conv
 

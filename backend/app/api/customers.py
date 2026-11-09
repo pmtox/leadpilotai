@@ -12,6 +12,7 @@ def create_customer(customer_in: CustomerCreate, db: Session = Depends(get_db)):
     customer = Customer(
         name=customer_in.name,
         phone=customer_in.phone,
+        email=customer_in.email,
         preferred_language=customer_in.preferred_language
     )
     db.add(customer)
@@ -29,4 +30,3 @@ def get_customer(customer_id: int, db: Session = Depends(get_db)):
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     return customer
-

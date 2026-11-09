@@ -3,7 +3,7 @@
 > **Product**: Autonomous Multilingual AI Sales Agent  
 > **Architecture**: React (Vite) + FastAPI (Python) + SQLite (SQLAlchemy) + LLM + Browser Voice + Action Engine  
 > **Current Sprint Checkpoint**: **`CP-06` — Interactive Dashboard & Call Center [COMPLETED]**  
-> **Next Milestone**: **`CP-07` — WhatsApp Follow-Up Workflow & Draft Fallback (Hour 7)**
+> **Next Milestone**: **`CP-07` — WhatsApp Follow-Up Workflow & Draft Fallback (Hour 7, IN PROGRESS)**
 
 ---
 
@@ -15,9 +15,9 @@
 | **CP-02** | **Text-based AI Conversation** | **Hour 2** | **✅ COMPLETED** | Unified LLM service (Gemini/Groq/Simulator), multilingual dialogue (EN/HI/TE), conversation history persistence, interactive chat UI, 7/7 tests passed |
 | **CP-03** | **Structured Information Extraction** | **Hour 3** | **✅ COMPLETED** | ExtractionService, Indian currency/Lakh parser, multilingual entity extraction (EN/HI/TE), cumulative state, live lead card in UI, 11/11 tests passed |
 | **CP-04** | **Lead Qualification Engine** | **Hour 4** | **✅ COMPLETED** | 0-100 scoring engine, HOT/WARM/COLD status, qualification reason, personalized follow-ups (EN/HI/TE), SQLite draft action, 16/16 tests passed |
-| **CP-05** | **Browser-based Voice Engine** | **Hour 5** | **✅ COMPLETED** | Web Speech STT, SpeechSynthesis TTS, Groq Whisper STT service, audio turn endpoint, mic UX, 18/18 tests passed |
+| **CP-05** | **Browser-based Voice Engine** | **Hour 5** | **✅ COMPLETED** | MediaRecorder capture, Groq Whisper STT, SpeechSynthesis TTS, audio turn endpoint, mic UX, 18/18 tests passed |
 | **CP-06** | **Interactive Dashboard** | **Hour 6** | **✅ COMPLETED** | Multi-tab application (Dashboard, Call Center, Leads CRM, Customers, Action Center, Settings), 19/19 tests passed |
-| **CP-07** | WhatsApp Follow-Up Workflow | Hour 7 | ⏳ UP NEXT | Meta Cloud API integration, consent checks, delivery tracking, draft fallback |
+| **CP-07** | WhatsApp Follow-Up Workflow | Hour 7 | 🛠️ IN PROGRESS | Meta Cloud API sender, explicit operator consent, draft fallback; delivery webhook remains |
 | **CP-08** | Callback Scheduler | Hour 8 | 📋 Planned | DateTime extraction, reminder persistence, calendar view |
 | **CP-09** | End-to-End Validation | Hour 9 | 📋 Planned | Multilingual conversation & qualification integration tests |
 | **CP-10** | Submission-Ready MVP | Hour 10 | 📋 Planned | Architecture docs, demo recording, deployment runbook |
@@ -37,10 +37,10 @@
 | **Conversation Engine** | Session lifecycles & Turn Management | Python + SQLite Messages | **INITIALIZED & OPERATIONAL** |
 | **Information Extraction** | Entity & Requirement Parsing | Structured Output + Regex/NLP | **INITIALIZED & OPERATIONAL** |
 | **Lead Qualification** | Rule-Based Qualification & Scoring | Python Rule Engine (0-100) | **INITIALIZED & OPERATIONAL** |
-| **Speech Recognition** | Voice-to-Text | Web SpeechRecognition + Groq Whisper | **INITIALIZED & OPERATIONAL** |
+| **Speech Recognition** | Voice-to-Text | Browser MediaRecorder + Groq Whisper | **INITIALIZED & OPERATIONAL** |
 | **Speech Generation** | Text-to-Voice | Web SpeechSynthesis API | **INITIALIZED & OPERATIONAL** |
 | **React Dashboard** | Multi-Panel Operator Console | React 19 + Vite | **INITIALIZED & OPERATIONAL** |
-| **Action & Callback Engine** | Follow-Up & Task Dispatch | APScheduler + WhatsApp API | *UP NEXT (CP-07/08)* |
+| **Action & Callback Engine** | Follow-Up & Task Dispatch | APScheduler + WhatsApp API | *CP-07 IN PROGRESS / CP-08 PLANNED* |
 | **Automated Testing** | Regression & Integration Testing | Pytest | **19/19 PASSED (0 WARNINGS)** |
 | **Documentation & Logs** | Architecture, Spec, and Tasks | Docx + Markdown | **IN PROGRESS & SYNCED** |
 
@@ -73,13 +73,16 @@
 
 ---
 
+## 🛠️ CP-07 Implementation in Progress
+
+- Added the Meta Cloud API sender with a configurable Graph API version (`WHATSAPP_GRAPH_API_VERSION`, default `v26.0`).
+- Added an explicit operator consent confirmation gate. A valid-looking phone number alone is not treated as WhatsApp opt-in; unconfirmed sends stay drafts.
+- Updated the Action Center to confirm consent, display draft text, and show message status accurately.
+- Added WhatsApp service and API tests. Live sending still requires Meta credentials, customer opt-in, and any required approved message templates.
+
 ## ⏩ Next Immediate Tasks (Hour 7 — Checkpoint CP-07)
 
-1. Implement `backend/app/services/whatsapp_service.py`:
-   - Meta Cloud API integration (Graph API endpoint).
-   - Customer opt-in and consent verification rules.
-   - Message delivery status tracking (`draft`, `queued`, `sent`, `delivered`, `failed`).
-   - Verified draft fallback when credentials are not configured or access is pending.
-2. Connect WhatsApp service to Action Center so operators can click "Authorize & Send" to dispatch live or mark executed.
-3. Author tests in `tests/test_whatsapp.py`.
-4. Synchronize CP-07 completion in `PROJECT_TASKS.md` and `LEADPILOT AI.docx`.
+1. Implement a Meta webhook endpoint that verifies webhook authenticity and records delivery receipts (`sent`, `delivered`, `failed`) against actions.
+2. Use approved WhatsApp templates for follow-ups outside Meta's customer-service window; free-form text is only suitable when the conversation window is open.
+3. Configure and test Meta credentials with an opted-in test recipient before enabling live sends.
+4. Finish end-to-end testing and synchronize CP-07 completion in `PROJECT_TASKS.md` and `LEADPILOT AI.docx`.

@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect
 from backend.app.core.config import settings
 from backend.app.database.connection import engine
 from backend.app.database.base import Base
@@ -13,6 +14,26 @@ from backend.app.api.callbacks import router as callbacks_router
 
 # Initialize database tables
 Base.metadata.create_all(bind=engine)
+
+def migrate_existing_columns():
+    """Add nullable fields to existing MVP databases without losing local data."""
+    additions = {
+        "customers": {"email": "VARCHAR(254)"},
+        "leads": {"budget_min": "FLOAT", "budget_max": "FLOAT"},
+    }
+    inspector = inspect(engine)
+    with engine.begin() as connection:
+        for table_name, columns in additions.items():
+            if not inspector.has_table(table_name):
+                continue
+            existing = {column["name"] for column in inspector.get_columns(table_name)}
+            for column_name, column_type in columns.items():
+                if column_name not in existing:
+                    connection.exec_driver_sql(
+                        f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+                    )
+
+migrate_existing_columns()
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -57,4 +78,3 @@ def health_check():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.app.main:app", host=settings.HOST, port=settings.PORT, reload=settings.DEBUG)
-

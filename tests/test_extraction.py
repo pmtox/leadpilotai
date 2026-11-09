@@ -3,8 +3,10 @@ from backend.app.database.connection import SessionLocal, engine
 from backend.app.database.base import Base
 from backend.app.models.customer import Customer
 from backend.app.models.lead import Lead
+from backend.app.models.conversation import Message
 from backend.app.services.conversation_service import conversation_service
 from backend.app.services.extraction_service import extraction_service
+from backend.app.core.config import settings
 
 @pytest.fixture(autouse=True)
 def setup_db():
@@ -40,6 +42,75 @@ def test_telugu_extraction_with_lakh():
     assert data["product_count"] == 100
     assert data["budget"] == 150000.0
 
+def test_reported_call_details_are_extracted_as_a_range():
+    text = (
+        "Our budget is ₹60K–₹1L. We have 10 products and need UPI, credit card, "
+        "Razorpay, and WhatsApp alerts. Please send me a proposal next week. "
+        "My email is priya@example.com."
+    )
+    data = extraction_service._extract_with_rules(text)
+
+    assert data["budget_min"] == 60000.0
+    assert data["budget_max"] == 100000.0
+    assert data["budget"] == 80000.0
+    assert data["product_count"] == 10
+    assert data["timeline"] == "Next week"
+    assert data["buying_intent"] == "HIGH"
+    assert data["email"] == "priya@example.com"
+    assert "UPI Payments" in data["features"]
+    assert "Credit/Debit Card Payments" in data["features"]
+    assert "Razorpay Integration" in data["features"]
+    assert "WhatsApp Notifications" in data["features"]
+
+def test_product_count_with_thousands_separator():
+    data = extraction_service._extract_with_rules(
+        "I have 10,000 items in my clothing catalog."
+    )
+
+    assert data["product_count"] == 10000
+
+def test_rule_extraction_fills_fields_omitted_by_llm(monkeypatch):
+    history = [{
+        "speaker": "customer",
+        "content": "Budget ₹60K–₹1L, launch next week, email me at priya@example.com.",
+    }]
+    monkeypatch.setattr(extraction_service, "_extract_with_llm", lambda _, conversation_id=None: {
+        "business_type": "Clothing",
+        "buying_intent": "LOW",
+    })
+    monkeypatch.setattr(
+        "backend.app.services.extraction_service.llm_service.is_live_provider_available",
+        lambda: True,
+    )
+    monkeypatch.setattr(settings, "LLM_EXTRACTION_ENABLED", True)
+
+    data = extraction_service.extract_from_transcript(history)
+
+    assert data["budget_min"] == 60000.0
+    assert data["budget_max"] == 100000.0
+    assert data["timeline"] == "Next week"
+    assert data["email"] == "priya@example.com"
+    assert data["buying_intent"] == "HIGH"
+
+def test_llm_extraction_is_skipped_by_default(monkeypatch):
+    history = [{"speaker": "customer", "content": "I run a clothing business."}]
+    monkeypatch.setattr(
+        "backend.app.services.extraction_service.llm_service.is_live_provider_available",
+        lambda: True,
+    )
+    monkeypatch.setattr(settings, "LLM_EXTRACTION_ENABLED", False)
+    monkeypatch.setattr(
+        extraction_service,
+        "_extract_with_llm",
+        lambda _, conversation_id=None: pytest.fail(
+            "optional LLM extraction should be disabled by default"
+        ),
+    )
+
+    data = extraction_service.extract_from_transcript(history)
+
+    assert data["business_type"] == "Clothing"
+
 def test_multi_turn_incremental_extraction(setup_db):
     db = setup_db
     cust = Customer(name="Vikram Patel", phone="+919123456789", preferred_language="English")
@@ -72,3 +143,51 @@ def test_multi_turn_incremental_extraction(setup_db):
     assert lead.timeline == "Next month"
     assert lead.buying_intent == "HIGH"
 
+def test_email_is_saved_and_call_summary_draft_is_created(setup_db, monkeypatch):
+    db = setup_db
+    customer = Customer(
+        name="Priya Sharma",
+        phone="+919876543210",
+        email="priya@example.com",
+    )
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    conversation = conversation_service.start_conversation(db, customer.id, "English")
+    conversation.messages.append(
+        Message(
+            speaker="customer",
+            content="Budget ₹60K–₹1L, 10 products, launch next week. Please send a proposal.",
+            language="English",
+        )
+    )
+    db.commit()
+    monkeypatch.setattr(
+        extraction_service,
+        "extract_from_transcript",
+        lambda _, conversation_id=None: {
+            "business_type": "Clothing",
+            "product_count": 10,
+            "budget": 80000.0,
+            "budget_min": 60000.0,
+            "budget_max": 100000.0,
+            "timeline": "Next week",
+            "features": ["UPI Payments", "WhatsApp Notifications"],
+            "buying_intent": "HIGH",
+            "language": "English",
+            "email": "priya@example.com",
+        },
+    )
+
+    lead = extraction_service.extract_and_update_lead(db, conversation.id)
+    actions = [action for action in lead.customer.actions if action.action_type == "email_followup"]
+
+    assert lead.budget_min == 60000.0
+    assert lead.budget_max == 100000.0
+    assert lead.customer.email == "priya@example.com"
+    assert len(actions) == 1
+    assert actions[0].status == "draft"
+    assert actions[0].payload["recipient"] == "priya@example.com"
+    assert "₹60,000–₹100,000" in actions[0].payload["message"]
+    assert "WhatsApp Notifications" in actions[0].payload["message"]
+    assert "Requested during the conversation" in actions[0].payload["message"]

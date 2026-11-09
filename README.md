@@ -63,4 +63,3 @@ All sensitive credentials, environment files (`.env`), API keys, SQLite database
 ## 📊 Sprint Status & Checkpoints
 - **Current Milestone**: `CP-01` — Project Foundation [COMPLETED]
 - **Next Milestone**: `CP-02` — LLM Conversation Engine
-- See [LEADPILOT AI.docx](./LEADPILOT%20AI.docx) for the official project specification.

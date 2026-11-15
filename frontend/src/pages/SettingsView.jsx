@@ -25,7 +25,7 @@ export default function SettingsView({ backendStatus }) {
             <div><strong>LLM Providers:</strong> Google Gemini API & Groq LLaMA</div>
             <div><strong>Speech Recognition (STT):</strong> Web Speech API & Groq Whisper-Large-v3</div>
             <div><strong>Speech Generation (TTS):</strong> Web SpeechSynthesis Engine</div>
-            <div><strong>Supported Languages:</strong> English, Hindi (हिंदी), Telugu (తెలుగు)</div>
+            <div><strong>Supported Languages:</strong> English, Hindi (हिंदी), Telugu (తెలుగు), Tamil (தமிழ்)</div>
           </div>
         </div>
       </div>

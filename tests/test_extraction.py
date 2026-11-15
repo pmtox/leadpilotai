@@ -42,6 +42,16 @@ def test_telugu_extraction_with_lakh():
     assert data["product_count"] == 100
     assert data["budget"] == 150000.0
 
+
+def test_tamil_extraction():
+    tamil_text = "எனக்கு ஆடை இணையதளம் வேண்டும், 150 பொருட்கள், பட்ஜெட் 1.5 லட்சம்."
+    data = extraction_service._extract_with_rules(tamil_text)
+
+    assert data["business_type"] == "Clothing"
+    assert data["product_count"] == 150
+    assert data["budget"] == 150000.0
+
+
 def test_reported_call_details_are_extracted_as_a_range():
     text = (
         "Our budget is ₹60K–₹1L. We have 10 products and need UPI, credit card, "

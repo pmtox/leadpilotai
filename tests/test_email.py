@@ -6,6 +6,7 @@ from backend.app.database.connection import SessionLocal, engine
 from backend.app.models.action import Action
 from backend.app.models.customer import Customer
 from backend.app.models.conversation import Conversation
+from backend.app.models.lead import Lead
 from backend.app.api.actions import ExecuteActionRequest, execute_action
 from backend.app.services.conversation_service import conversation_service
 from backend.app.services.email_service import EmailService
@@ -253,5 +254,100 @@ def test_ending_conversation_automatically_sends_recap_once(monkeypatch):
         assert send_calls == [("customer@example.test", True)]
         assert action.status == "sent"
         assert action.executed_at is not None
+    finally:
+        db.close()
+
+
+def test_ending_conversation_creates_and_sends_email_for_customer_address(monkeypatch):
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        customer = Customer(
+            name="New Email Action Customer",
+            phone="9876543210",
+            email="new-customer@example.test",
+        )
+        db.add(customer)
+        db.commit()
+        db.refresh(customer)
+        conversation = Conversation(customer_id=customer.id, status="active")
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+        db.add(
+            Lead(
+                customer_id=customer.id,
+                conversation_id=conversation.id,
+                business_type="Clothing",
+                product_count=50,
+                budget=70000,
+                timeline="Next month",
+                features=["UPI Payments"],
+            )
+        )
+        db.commit()
+
+        monkeypatch.setattr(
+            "backend.app.services.conversation_service.extraction_service.extract_and_update_lead",
+            lambda _db, _conversation_id: None,
+        )
+        send_calls = []
+
+        def fake_send_email(recipient, subject, body, consent_confirmed=False):
+            send_calls.append((recipient, subject, body, consent_confirmed))
+            return {"status": "sent", "message": "Email sent.", "draft_text": None}
+
+        monkeypatch.setattr(
+            "backend.app.services.conversation_service.email_service.send_email",
+            fake_send_email,
+        )
+
+        conversation_service.end_conversation(db, conversation.id)
+
+        action = db.query(Action).filter(
+            Action.conversation_id == conversation.id,
+            Action.action_type == "email_followup",
+        ).one()
+        assert action.status == "sent"
+        assert action.executed_at is not None
+        recipient, subject, body, consent_confirmed = send_calls[0]
+        assert recipient == "new-customer@example.test"
+        assert subject == action.payload["subject"]
+        assert "Clothing" in body
+        assert "50 products" in body
+        assert "INR 70,000" in body
+        assert consent_confirmed is True
+    finally:
+        db.close()
+
+
+def test_ending_conversation_without_customer_email_does_not_create_email_action(monkeypatch):
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        customer = Customer(name="No Email Customer", phone="9876543210")
+        db.add(customer)
+        db.commit()
+        db.refresh(customer)
+        conversation = Conversation(customer_id=customer.id, status="active")
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+
+        monkeypatch.setattr(
+            "backend.app.services.conversation_service.extraction_service.extract_and_update_lead",
+            lambda _db, _conversation_id: None,
+        )
+        monkeypatch.setattr(
+            "backend.app.services.conversation_service.email_service.send_email",
+            MagicMock(),
+        )
+
+        conversation_service.end_conversation(db, conversation.id)
+
+        assert not db.query(Action).filter(
+            Action.conversation_id == conversation.id,
+            Action.action_type == "email_followup",
+        ).first()
     finally:
         db.close()

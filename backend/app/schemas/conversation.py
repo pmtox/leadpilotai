@@ -35,6 +35,9 @@ class ConversationResponse(BaseModel):
     duration: int
     summary: Optional[str] = None
     messages: List[MessageResponse] = []
-    lead: Optional[LeadResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AdminConversationResponse(ConversationResponse):
+    lead: Optional[LeadResponse] = None

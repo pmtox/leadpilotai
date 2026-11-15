@@ -45,6 +45,8 @@ class SpeechService:
                 lang_code = "hi"
             elif "telugu" in lang_lower:
                 lang_code = "te"
+            elif "tamil" in lang_lower:
+                lang_code = "ta"
             elif "english" in lang_lower:
                 lang_code = "en"
 

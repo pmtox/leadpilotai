@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, ForeignKey, Integer, String, DateTime
 from sqlalchemy.orm import relationship
 from backend.app.database.base import Base
 
@@ -15,7 +15,9 @@ class Customer(Base):
     email = Column(String(254), nullable=True)
     preferred_language = Column(String(20), default="English")
     created_at = Column(DateTime, default=utc_now)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, unique=True, index=True)
 
+    user = relationship("User", back_populates="customer")
     conversations = relationship("Conversation", back_populates="customer", cascade="all, delete-orphan")
     leads = relationship("Lead", back_populates="customer", cascade="all, delete-orphan")
     actions = relationship("Action", back_populates="customer", cascade="all, delete-orphan")

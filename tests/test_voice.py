@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 import pytest
 import asyncio
 from fastapi import HTTPException, UploadFile
@@ -24,6 +24,22 @@ def test_speech_service_transcription():
         text = speech_service.transcribe_audio(dummy_wav, "sample.wav", "English")
     assert text == "I need an online store."
 
+
+def test_tamil_speech_transcription_sends_tamil_language_code(monkeypatch):
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"text": "வணக்கம்"}
+    client = MagicMock()
+    client.__enter__.return_value = client
+    client.post.return_value = response
+    monkeypatch.setattr(speech_service, "groq_key", "test-key")
+    monkeypatch.setattr("backend.app.services.speech_service.httpx.Client", lambda **kwargs: client)
+
+    text = speech_service._call_groq_whisper(b"audio", "recording.webm", "Tamil")
+
+    assert text == "வணக்கம்"
+    assert client.post.call_args.kwargs["data"]["language"] == "ta"
+
+
 def test_speech_service_reports_missing_groq_key():
     with patch.object(speech_service, "groq_key", ""):
         with pytest.raises(RuntimeError, match="not configured"):
@@ -40,7 +56,7 @@ def test_audio_endpoint_reports_transcription_failure():
     from backend.app.api.conversations import process_audio_turn
 
     upload = UploadFile(filename="recording.webm", file=BytesIO(b"audio"))
-    with patch.object(
+    with patch("backend.app.api.conversations._owned_conversation"), patch.object(
         speech_service,
         "transcribe_audio",
         side_effect=RuntimeError("Groq API key is not configured"),

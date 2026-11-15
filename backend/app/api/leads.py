@@ -1,11 +1,16 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from backend.app.core.auth import require_admin
 from backend.app.database.connection import get_db
 from backend.app.models.lead import Lead
 from backend.app.schemas.lead import LeadResponse
 
-router = APIRouter(prefix="/api/leads", tags=["leads"])
+router = APIRouter(
+    prefix="/api/leads",
+    tags=["leads"],
+    dependencies=[Depends(require_admin)],
+)
 
 @router.get("", response_model=List[LeadResponse])
 def list_leads(db: Session = Depends(get_db)):

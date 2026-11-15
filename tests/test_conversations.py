@@ -19,6 +19,7 @@ def test_language_detection():
     assert detect_language("Hello, I want to build a website") == "English"
     assert detect_language("नमस्ते, मुझे ऑनलाइन स्टोर बनाना है") == "Hindi"
     assert detect_language("నమస్కారం, నాకు ఇ-కామర్స్ వెబ్‌సైట్ కావాలి") == "Telugu"
+    assert detect_language("வணக்கம், எனக்கு இணையதளம் வேண்டும்") == "Tamil"
     assert detect_language("Namaste, mujhe dukan ke liye site chahiye") == "Hindi"
     assert detect_language("Namaskaram, nenu online business cheyali") == "Telugu"
 
@@ -118,6 +119,54 @@ def test_fallback_does_not_repeat_timeline_question():
     assert "next month" not in reply.lower()
     assert "budget" in reply.lower()
 
+
+def _completed_requirements_history(latest_customer_message):
+    return [
+        {
+            "speaker": "customer",
+            "content": (
+                "I want a clothing website with 10,000 products and a budget of INR 50,000. "
+                "Launch next week and include UPI payments and inventory."
+            ),
+        },
+        {
+            "speaker": "agent",
+            "content": "Thanks, I have noted your requirements. Would you like me to arrange a follow-up with our team?",
+        },
+        {"speaker": "customer", "content": latest_customer_message},
+    ]
+
+
+def test_fallback_acknowledges_email_delivery_request():
+    history = _completed_requirements_history("pmishraa24@gmail.com send here")
+
+    reply = llm_service._intelligent_fallback_reply(history, "English")
+
+    assert "pmishraa24@gmail.com" in reply
+    assert "end the conversation" in reply.lower()
+    assert "would you like me to arrange" not in reply.lower()
+
+
+def test_fallback_clarifies_unrecognized_email_address():
+    history = _completed_requirements_history(
+        "Yes, please forward it to pmishra24 at the date gmail.com."
+    )
+
+    reply = llm_service._intelligent_fallback_reply(history, "English")
+
+    assert "type the exact email address" in reply.lower()
+    assert "would you like me to arrange" not in reply.lower()
+
+
+def test_fallback_acknowledges_followup_confirmation():
+    history = _completed_requirements_history("Yes, please.")
+
+    reply = llm_service._intelligent_fallback_reply(history, "English")
+
+    assert "noted" in reply.lower()
+    assert "would you like me to arrange" not in reply.lower()
+
+
 def test_incomplete_turn_asks_only_next_missing_requirement(setup_db, monkeypatch):
     db = setup_db
     customer = Customer(
@@ -209,6 +258,165 @@ def test_project_catalog_and_numeric_budget_answers_advance_dialogue(setup_db, m
     assert conversation.lead.budget == 70000
     assert "launch" in conversation.messages[-1].content.lower()
 
+
+@pytest.mark.parametrize("product_answer", ["10,000", "Ten thousand"])
+def test_product_count_answer_advances_dialogue(setup_db, monkeypatch, product_answer):
+    db = setup_db
+    customer = Customer(
+        name="Product Count Customer",
+        phone="+919876543210",
+        preferred_language="English",
+    )
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    conversation = conversation_service.start_conversation(db, customer.id, "English")
+    monkeypatch.setattr(llm_service, "is_live_provider_available", lambda: False)
+
+    conversation = conversation_service.process_turn(
+        db,
+        conversation.id,
+        "I want to build a clothing website.",
+    )
+    assert "how many products" in conversation.messages[-1].content.lower()
+
+    conversation = conversation_service.process_turn(
+        db,
+        conversation.id,
+        product_answer,
+    )
+
+    assert conversation.lead.product_count == 10000
+    assert "budget" in conversation.messages[-1].content.lower()
+    assert "products" not in conversation.messages[-1].content.lower()
+
+
+@pytest.mark.parametrize("product_answer", ["50,000", "पचास हजार", "पचास हजार पचास हजार"])
+def test_hindi_product_count_answer_advances_dialogue(setup_db, monkeypatch, product_answer):
+    db = setup_db
+    customer = Customer(
+        name="Hindi Product Count Customer",
+        phone="+919876543210",
+        preferred_language="Hindi",
+    )
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    conversation = conversation_service.start_conversation(db, customer.id, "Hindi")
+    monkeypatch.setattr(llm_service, "is_live_provider_available", lambda: False)
+
+    conversation = conversation_service.process_turn(
+        db,
+        conversation.id,
+        "मुझे कपड़ों की वेबसाइट बनानी है।",
+    )
+    assert "कितने उत्पाद" in conversation.messages[-1].content
+
+    conversation = conversation_service.process_turn(
+        db,
+        conversation.id,
+        product_answer,
+    )
+
+    assert conversation.lead.product_count == 50000
+    assert "बजट" in conversation.messages[-1].content
+    assert "कितने उत्पाद" not in conversation.messages[-1].content
+
+
+@pytest.mark.parametrize(
+    "product_answer",
+    ["50,000", "ஐம்பது ஆயிரம்", "ஐம்பது ஆயிரம் ஐம்பது ஆயிரம்"],
+)
+def test_tamil_product_count_answer_advances_dialogue(setup_db, monkeypatch, product_answer):
+    db = setup_db
+    customer = Customer(
+        name="Tamil Product Count Customer",
+        phone="+919876543210",
+        preferred_language="Tamil",
+    )
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    conversation = conversation_service.start_conversation(db, customer.id, "Tamil")
+    monkeypatch.setattr(llm_service, "is_live_provider_available", lambda: False)
+
+    conversation = conversation_service.process_turn(
+        db,
+        conversation.id,
+        "எனக்கு ஆடை விற்பனைக்கான இணையதளம் வேண்டும்.",
+    )
+    assert "எத்தனை" in conversation.messages[-1].content
+
+    conversation = conversation_service.process_turn(
+        db,
+        conversation.id,
+        product_answer,
+    )
+
+    assert conversation.lead.product_count == 50000
+    assert "பட்ஜெட்" in conversation.messages[-1].content
+    assert "எத்தனை" not in conversation.messages[-1].content
+
+    conversation = conversation_service.process_turn(
+        db,
+        conversation.id,
+        "ஐம்பதாயிரம்",
+    )
+    assert conversation.lead.budget == 50000
+    assert "எப்போது" in conversation.messages[-1].content
+
+
+@pytest.mark.parametrize(
+    ("budget_answer", "expected_budget"),
+    [
+        ("10,000", 10000),
+        ("Ten thousand rupees", 10000),
+        ("50,000 budget.", 50000),
+        ("50,000.", 50000),
+    ],
+)
+def test_budget_answer_is_retained_after_following_turn(
+    setup_db,
+    monkeypatch,
+    budget_answer,
+    expected_budget,
+):
+    db = setup_db
+    customer = Customer(
+        name="Budget Follow-up Customer",
+        phone="+919876543210",
+        preferred_language="English",
+    )
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    conversation = conversation_service.start_conversation(db, customer.id, "English")
+    monkeypatch.setattr(llm_service, "is_live_provider_available", lambda: False)
+
+    conversation = conversation_service.process_turn(
+        db,
+        conversation.id,
+        "I sell clothing and have 50 products.",
+    )
+    assert "budget" in conversation.messages[-1].content.lower()
+
+    conversation = conversation_service.process_turn(
+        db,
+        conversation.id,
+        budget_answer,
+    )
+    assert conversation.lead.budget == expected_budget
+    assert "launch" in conversation.messages[-1].content.lower()
+
+    conversation = conversation_service.process_turn(
+        db,
+        conversation.id,
+        "Next week.",
+    )
+    assert "feature" in conversation.messages[-1].content.lower()
+    assert "budget" not in conversation.messages[-1].content.lower()
+
+
 def test_duplicate_provider_reply_is_detected():
     history = [
         {"speaker": "agent", "content": "What is your launch timeline?"},
@@ -238,6 +446,65 @@ def test_groq_model_id_is_sent_without_legacy_replacement(monkeypatch):
         )
 
     assert client.post.call_args.kwargs["json"]["model"] == "openai/gpt-oss-120b"
+
+
+def test_gemini_uses_api_key_header_and_extended_timeout(monkeypatch):
+    from backend.app.core.config import settings
+
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setattr(settings, "GEMINI_MODEL", "gemini-3.8-flash")
+    response = MagicMock(status_code=200)
+    response.json.return_value = {
+        "candidates": [{
+            "content": {"parts": [{"text": "A helpful answer."}]},
+            "finishReason": "STOP",
+        }]
+    }
+    client = MagicMock()
+    client.__enter__.return_value = client
+    client.post.return_value = response
+
+    with patch("backend.app.services.llm_service.httpx.Client", return_value=client) as client_factory:
+        reply = llm_service._call_gemini(
+            [{"speaker": "customer", "content": "Hello"}],
+            "English",
+            "You are a sales assistant.",
+        )
+
+    assert reply == "A helpful answer."
+    client_factory.assert_called_once()
+    assert client_factory.call_args.kwargs["timeout"].read == 30.0
+    request_url = client.post.call_args.args[0]
+    request_kwargs = client.post.call_args.kwargs
+    assert request_url.endswith("/models/gemini-3.8-flash:generateContent")
+    assert "test-gemini-key" not in request_url
+    assert request_kwargs["headers"]["x-goog-api-key"] == "test-gemini-key"
+
+
+def test_gemini_api_error_logs_provider_message(monkeypatch, caplog):
+    from backend.app.core.config import settings
+
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "test-gemini-key")
+    response = MagicMock(status_code=400)
+    response.json.return_value = {
+        "error": {"message": "API key is not authorized for this API."}
+    }
+    client = MagicMock()
+    client.__enter__.return_value = client
+    client.post.return_value = response
+
+    with patch("backend.app.services.llm_service.httpx.Client", return_value=client):
+        reply = llm_service._call_gemini(
+            [{"speaker": "customer", "content": "Hello"}],
+            "English",
+            "You are a sales assistant.",
+        )
+
+    assert reply is None
+    assert "status 400" in caplog.text
+    assert "not authorized for this API" in caplog.text
+    assert "test-gemini-key" not in caplog.text
+
 
 def test_groq_truncated_reply_is_rejected(monkeypatch):
     response = MagicMock(status_code=200)

@@ -1,8 +1,16 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  ?? (import.meta.env.DEV ? 'http://localhost:8000' : '');
+
+function apiFetch(path, options = {}) {
+  return fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    credentials: 'include',
+  });
+}
 
 export async function checkBackendHealth() {
   try {
-    const res = await fetch(`${API_BASE_URL}/health`);
+    const res = await apiFetch('/health');
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     return await res.json();
   } catch (err) {
@@ -10,14 +18,50 @@ export async function checkBackendHealth() {
   }
 }
 
+export async function fetchAuthStatus() {
+  const res = await apiFetch('/api/auth/status');
+  if (!res.ok) throw new Error('Failed to check sign-in configuration');
+  return await res.json();
+}
+
+export async function fetchCurrentUser() {
+  const res = await apiFetch('/api/auth/me');
+  if (res.status === 401) return null;
+  if (!res.ok) throw new Error('Failed to load your profile');
+  return await res.json();
+}
+
+export async function updateProfile(data) {
+  const res = await apiFetch('/api/auth/profile', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || 'Failed to update your profile');
+  }
+  return await res.json();
+}
+
+export async function logout() {
+  const res = await apiFetch('/api/auth/logout', { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to sign out');
+  return await res.json();
+}
+
+export function googleLoginUrl() {
+  return `${API_BASE_URL}/api/auth/google`;
+}
+
 export async function fetchCustomers() {
-  const res = await fetch(`${API_BASE_URL}/api/customers`);
+  const res = await apiFetch('/api/customers');
   if (!res.ok) throw new Error('Failed to fetch customers');
   return await res.json();
 }
 
 export async function createCustomer(data) {
-  const res = await fetch(`${API_BASE_URL}/api/customers`, {
+  const res = await apiFetch('/api/customers', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -27,7 +71,7 @@ export async function createCustomer(data) {
 }
 
 export async function startConversation(customerId, initialLanguage = 'English') {
-  const res = await fetch(`${API_BASE_URL}/api/conversations/start`, {
+  const res = await apiFetch('/api/conversations/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ customer_id: customerId, initial_language: initialLanguage }),
@@ -37,7 +81,7 @@ export async function startConversation(customerId, initialLanguage = 'English')
 }
 
 export async function sendMessage(conversationId, message, language = 'English') {
-  const res = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/message`, {
+  const res = await apiFetch(`/api/conversations/${conversationId}/message`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, language }),
@@ -51,7 +95,7 @@ export async function sendAudioMessage(conversationId, audioBlob, filename, lang
   formData.append('file', audioBlob, filename);
   formData.append('language', language);
 
-  const res = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/audio`, {
+  const res = await apiFetch(`/api/conversations/${conversationId}/audio`, {
     method: 'POST',
     body: formData,
   });
@@ -63,7 +107,7 @@ export async function sendAudioMessage(conversationId, audioBlob, filename, lang
 }
 
 export async function endConversation(conversationId) {
-  const res = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/end`, {
+  const res = await apiFetch(`/api/conversations/${conversationId}/end`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -72,25 +116,25 @@ export async function endConversation(conversationId) {
 }
 
 export async function fetchConversations() {
-  const res = await fetch(`${API_BASE_URL}/api/conversations`);
+  const res = await apiFetch('/api/conversations');
   if (!res.ok) throw new Error('Failed to fetch conversations');
   return await res.json();
 }
 
 export async function fetchLeads() {
-  const res = await fetch(`${API_BASE_URL}/api/leads`);
+  const res = await apiFetch('/api/leads');
   if (!res.ok) throw new Error('Failed to fetch leads');
   return await res.json();
 }
 
 export async function fetchActions() {
-  const res = await fetch(`${API_BASE_URL}/api/actions`);
+  const res = await apiFetch('/api/actions');
   if (!res.ok) throw new Error('Failed to fetch actions');
   return await res.json();
 }
 
 export async function executeAction(actionId, consentConfirmed = false) {
-  const res = await fetch(`${API_BASE_URL}/api/actions/${actionId}/execute`, {
+  const res = await apiFetch(`/api/actions/${actionId}/execute`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ consent_confirmed: consentConfirmed }),
@@ -103,13 +147,18 @@ export async function executeAction(actionId, consentConfirmed = false) {
 }
 
 export async function fetchCallbacks() {
-  const res = await fetch(`${API_BASE_URL}/api/callbacks`);
+  const res = await apiFetch('/api/callbacks');
   if (!res.ok) throw new Error('Failed to fetch callbacks');
   return await res.json();
 }
 
 export default {
   checkBackendHealth,
+  fetchAuthStatus,
+  fetchCurrentUser,
+  updateProfile,
+  logout,
+  googleLoginUrl,
   fetchCustomers,
   createCustomer,
   startConversation,

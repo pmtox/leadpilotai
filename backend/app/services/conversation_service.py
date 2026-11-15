@@ -12,11 +12,34 @@ from backend.app.services.email_service import email_service
 GREETINGS = {
     "English": "Hello! I am LeadPilot AI. I understand you're looking to build an e-commerce website. Do you have a couple of minutes to discuss your requirements?",
     "Hindi": "नमस्ते! मैं LeadPilot AI हूँ। मुझे पता चला है कि आप एक ई-कॉमर्स वेबसाइट बनाना चाहते हैं। क्या आपके पास अपनी आवश्यकताओं पर चर्चा करने के लिए कुछ मिनट हैं?",
-    "Telugu": "నమస్కారం! నేను LeadPilot AI. మీరు ఇ-కామర్స్ వెబ్‌సైట్ నిర్మించాలనుకుంటున్నారని తెలిసింది. మీ అవసరాల గురించి మాట్లాడటానికి మీకు రెండు నిమిషాలు సమయం ఉందా?"
+    "Telugu": "నమస్కారం! నేను LeadPilot AI. మీరు ఇ-కామర్స్ వెబ్‌సైట్ నిర్మించాలనుకుంటున్నారని తెలిసింది. మీ అవసరాల గురించి మాట్లాడటానికి మీకు రెండు నిమిషాలు సమయం ఉందా?",
+    "Tamil": "வணக்கம்! நான் LeadPilot AI. நீங்கள் இணையவழி கடை அமைக்க விரும்புகிறீர்கள் என்று புரிகிறது. உங்கள் தேவைகளைப் பற்றி சில நிமிடங்கள் பேசலாமா?"
 }
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _build_email_recap(customer: Customer, lead: Any) -> str:
+    lines = [
+        f"Hi {customer.name},",
+        "",
+        "Thank you for discussing your e-commerce project with us. Here is a summary of the requirements you shared:",
+    ]
+    if lead:
+        if lead.business_type:
+            lines.append(f"- Business type: {lead.business_type}")
+        if lead.product_count is not None:
+            lines.append(f"- Catalog size: {lead.product_count:,} products")
+        if lead.budget is not None:
+            lines.append(f"- Budget: INR {lead.budget:,.0f}")
+        if lead.timeline:
+            lines.append(f"- Target launch: {lead.timeline}")
+        if lead.features:
+            lines.append(f"- Requested features: {', '.join(lead.features)}")
+    lines.extend(["", "Our team will follow up with you about the next steps.", "", "Best,", "LeadPilot AI"])
+    return "\n".join(lines)
+
 
 class ConversationService:
     def start_conversation(self, db: Session, customer_id: int, initial_language: Optional[str] = None) -> Conversation:
@@ -143,6 +166,23 @@ class ConversationService:
             Action.conversation_id == conv.id,
             Action.action_type == "email_followup",
         ).first()
+        customer = conv.customer
+        if email_action is None and customer and customer.email:
+            email_action = Action(
+                customer_id=customer.id,
+                conversation_id=conv.id,
+                action_type="email_followup",
+                payload={
+                    "recipient": customer.email,
+                    "subject": "Your e-commerce project discussion summary",
+                    "message": _build_email_recap(customer, conv.lead),
+                },
+                status="draft",
+            )
+            db.add(email_action)
+            db.commit()
+            db.refresh(email_action)
+
         if email_action and email_action.status in ("draft", "pending"):
             payload = dict(email_action.payload or {})
             result = email_service.send_email(

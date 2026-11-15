@@ -18,6 +18,12 @@ class Settings:
     PORT: int = int(os.getenv("PORT", "8000"))
 
     CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "")
+    AUTH_SESSION_SECRET: str = os.getenv("AUTH_SESSION_SECRET", "")
+    ADMIN_EMAILS: str = os.getenv("ADMIN_EMAILS", "")
 
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./leadpilot.db")
 
@@ -44,5 +50,9 @@ class Settings:
     @property
     def cors_origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def admin_emails(self) -> List[str]:
+        return [email.strip().casefold() for email in self.ADMIN_EMAILS.split(",") if email.strip()]
 
 settings = Settings()

@@ -11,7 +11,7 @@ class CustomerBase(BaseModel):
         pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
         description="Customer email address for follow-up summaries",
     )
-    preferred_language: Optional[str] = Field("English", description="Preferred language (English, Hindi, Telugu)")
+    preferred_language: Optional[str] = Field("English", description="Preferred language (English, Hindi, Telugu, Tamil)")
 
 class CustomerCreate(CustomerBase):
     pass

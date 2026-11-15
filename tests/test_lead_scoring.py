@@ -82,6 +82,10 @@ def test_personalized_followup_generation():
     assert "సురేష్" in msg_te
     assert "LeadPilot AI" in msg_te
 
+    msg_ta = lead_scoring_engine.generate_followup_message("அருண்", lead_data, language="Tamil")
+    assert "அருண்" in msg_ta
+    assert "LeadPilot AI" in msg_ta
+
 def test_lead_qualification_end_to_end(setup_db):
     db = setup_db
     cust = Customer(name="Ananya Verma", phone="+919876500000", preferred_language="English")

@@ -272,6 +272,7 @@ class TestExecuteActionEndpoint:
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy.pool import StaticPool
         from backend.app.api.actions import router
+        from backend.app.core.auth import require_admin
         from backend.app.database.connection import get_db
         from backend.app.database.base import Base
         from backend.app.models.customer import Customer
@@ -302,6 +303,7 @@ class TestExecuteActionEndpoint:
         app = FastAPI()
         app.include_router(router)
         app.dependency_overrides[get_db] = lambda: db
+        app.dependency_overrides[require_admin] = lambda: None
         with patch(
             "backend.app.api.actions.whatsapp_service.send_whatsapp_message",
             return_value={

@@ -1,7 +1,9 @@
 import pytest
+from uuid import uuid4
 from backend.app.database.connection import SessionLocal, engine
 from backend.app.database.base import Base
 from backend.app.models.customer import Customer
+from backend.app.models.user import User
 from backend.app.models.action import Action
 from backend.app.services.conversation_service import conversation_service
 from backend.app.api.customers import list_customers
@@ -19,8 +21,22 @@ def setup_db():
 
 def test_dashboard_api_endpoints(setup_db):
     db = setup_db
+    unique_id = uuid4().hex
+    user = User(
+        google_sub=f"dashboard-user-{unique_id}",
+        email=f"dashboard-user-{unique_id}@example.test",
+        name="Dashboard User",
+        role="user",
+    )
+    db.add(user)
+    db.flush()
     # Create customer
-    cust = Customer(name="Dashboard Prospect", phone="+919900011222", preferred_language="English")
+    cust = Customer(
+        name="Dashboard Prospect",
+        phone="+919900011222",
+        preferred_language="English",
+        user_id=user.id,
+    )
     db.add(cust)
     db.commit()
     db.refresh(cust)
@@ -35,9 +51,9 @@ def test_dashboard_api_endpoints(setup_db):
     assert any(c.name == "Dashboard Prospect" for c in customers)
 
     # 2. Test conversations listing
-    conversations = list_conversations(db)
+    conversations = list_conversations(db, user)
     assert len(conversations) >= 1
-    assert any(c.id == conv.id for c in conversations)
+    assert any(c["id"] == conv.id for c in conversations)
 
     # 3. Test leads listing
     leads = list_leads(db)
@@ -70,4 +86,8 @@ def test_dashboard_api_endpoints(setup_db):
 
     callbacks = list_callbacks(db)
     assert len(callbacks) >= 1
+
+    db.delete(cust)
+    db.delete(user)
+    db.commit()
 

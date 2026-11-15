@@ -129,6 +129,14 @@ class LeadScoringEngine:
                 f"మీ {biz} వ్యాపారం కోసం {telugu_prod} మరియు {feat_str} ఫీచర్లతో ఆన్‌లైన్ స్టోర్ ప్రతిపాదన సిద్ధంగా ఉంది ({telugu_budget}). "
                 f"తదుపరి వివరాలు చర్చించడానికి తగిన సమయం తెలపగలరు."
             )
+        elif language == "Tamil":
+            tamil_products = f"{prods} தயாரிப்புகளுடன்" if prods else "உங்கள் தயாரிப்புகளுடன்"
+            tamil_budget = f"{budget_display} பட்ஜெட்டில்" if budget_display else "உங்கள் பட்ஜெட்டிற்கு ஏற்ப"
+            return (
+                f"வணக்கம் {customer_name}! LeadPilot AI-யைத் தொடர்புகொண்டதற்கு நன்றி. "
+                f"உங்கள் {biz} வணிகத்திற்காக {tamil_products} ஆன்லைன் கடைத் திட்டத்தைத் தயாரித்துள்ளோம்; "
+                f"இது {tamil_budget} அமையும். அடுத்த படிகளைப் பேச எப்போது அழைக்கலாம்?"
+            )
         else:
             return (
                 f"Hi {customer_name}, thank you for speaking with LeadPilot AI today! "

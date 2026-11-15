@@ -1,77 +1,103 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { fetchCustomers, fetchConversations } from '../services/api';
 
 export default function CustomersView() {
   const [customers, setCustomers] = useState([]);
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [cList, convList] = await Promise.all([
-          fetchCustomers().catch(() => []),
-          fetchConversations().catch(() => [])
-        ]);
-        setCustomers(cList);
-        setConversations(convList);
-      } catch (err) {
-        console.error('Failed to load customers:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
+    let active = true;
+
+    Promise.all([fetchCustomers(), fetchConversations()])
+      .then(([customerList, conversationList]) => {
+        if (!active) return;
+        setCustomers(customerList);
+        setConversations(conversationList);
+      })
+      .catch((loadError) => {
+        if (active) setError(loadError.message || 'Could not load customer records.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
+  const conversationCounts = conversations.reduce((counts, conversation) => {
+    counts[conversation.customer_id] = (counts[conversation.customer_id] || 0) + 1;
+    return counts;
+  }, {});
+  const leadsByCustomer = conversations.reduce((leads, conversation) => {
+    if (conversation.lead) leads[conversation.customer_id] = conversation.lead;
+    return leads;
+  }, {});
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      <div>
-        <h2 style={{ margin: '0 0 4px 0', fontSize: '20px', color: '#0f172a' }}>👥 Customer Directory & History</h2>
-        <p style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>Registered customer contacts, language preferences, and interaction sessions.</p>
+    <section className="page-section">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">ADMIN WORKSPACE</p>
+          <h1>Customers</h1>
+          <p>Customer accounts, conversations, and lead status.</p>
+        </div>
+        <span className="record-count">{customers.length} {customers.length === 1 ? 'customer' : 'customers'}</span>
       </div>
 
-      <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-        {customers.length === 0 ? (
-          <div style={{ padding: '36px', textAlign: 'center', color: '#94a3b8' }}>
-            No customers registered yet.
-          </div>
+      {error && <p className="notice notice-error" role="alert">{error}</p>}
+
+      <div className="surface table-card">
+        {loading ? (
+          <p className="table-state">Loading customer records…</p>
+        ) : customers.length === 0 ? (
+          <p className="table-state">No customer accounts yet.</p>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: '12px', textTransform: 'uppercase' }}>
-                <th style={{ padding: '12px 16px' }}>ID</th>
-                <th style={{ padding: '12px 16px' }}>Name</th>
-                <th style={{ padding: '12px 16px' }}>Phone</th>
-                <th style={{ padding: '12px 16px' }}>Email</th>
-                <th style={{ padding: '12px 16px' }}>Preferred Language</th>
-                <th style={{ padding: '12px 16px' }}>Calls / Sessions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {customers.map((c) => {
-                const count = conversations.filter(conv => conv.customer_id === c.id).length;
-                return (
-                  <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '12px 16px', fontWeight: '600', color: '#64748b' }}>#{c.id}</td>
-                    <td style={{ padding: '12px 16px', fontWeight: '600', color: '#0f172a' }}>{c.name}</td>
-                    <td style={{ padding: '12px 16px', color: '#334155' }}>{c.phone}</td>
-                    <td style={{ padding: '12px 16px', color: '#334155' }}>{c.email || '—'}</td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: '10px', fontSize: '12px' }}>
-                        {c.preferred_language || 'English'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 16px', fontWeight: '600', color: '#2563eb' }}>
-                      {count} {count === 1 ? 'interaction' : 'interactions'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th>Contact</th>
+                  <th>Language</th>
+                  <th>Lead status</th>
+                  <th>Conversations</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((customer) => {
+                  const lead = leadsByCustomer[customer.id];
+                  const classification = lead?.classification?.toLowerCase();
+                  return (
+                    <tr key={customer.id}>
+                      <td>
+                        <strong className="table-primary">{customer.name}</strong>
+                        <span className="table-secondary">Customer #{customer.id}</span>
+                      </td>
+                      <td>
+                        <span className="table-primary">{customer.email || '—'}</span>
+                        <span className="table-secondary">{customer.phone || 'No phone number'}</span>
+                      </td>
+                      <td><span className="language-tag">{customer.preferred_language || 'English'}</span></td>
+                      <td>
+                        {lead ? (
+                          <span className={`lead-tag lead-tag-${classification || 'cold'}`}>
+                            {lead.classification || 'New'} · {lead.score || 0}/100
+                          </span>
+                        ) : <span className="table-secondary">Not qualified</span>}
+                      </td>
+                      <td className="session-count">{conversationCounts[customer.id] || 0}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }

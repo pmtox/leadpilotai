@@ -10,13 +10,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from backend.app.core.auth import require_admin
 from backend.app.database.connection import get_db
 from backend.app.models.action import Action
 from backend.app.models.customer import Customer
 from backend.app.services.email_service import email_service
 from backend.app.services.whatsapp_service import whatsapp_service
 
-router = APIRouter(prefix="/api/actions", tags=["actions"])
+router = APIRouter(
+    prefix="/api/actions",
+    tags=["actions"],
+    dependencies=[Depends(require_admin)],
+)
 
 class ExecuteActionRequest(BaseModel):
     consent_confirmed: bool = False

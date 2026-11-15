@@ -16,26 +16,32 @@ logger = logging.getLogger(__name__)
 _rate_limited_until: Dict[str, float] = {}
 
 def detect_language(text: str, fallback_lang: str = "English") -> str:
-    """Detect whether text is primarily Hindi, Telugu, or English."""
+    """Detect whether text is primarily Hindi, Telugu, Tamil, or English."""
     if not text:
         return fallback_lang
 
     devanagari_count = sum(1 for c in text if '\u0900' <= c <= '\u097F')
     telugu_count = sum(1 for c in text if '\u0C00' <= c <= '\u0C7F')
+    tamil_count = sum(1 for c in text if '\u0B80' <= c <= '\u0BFF')
 
     if devanagari_count > 0:
         return "Hindi"
     if telugu_count > 0:
         return "Telugu"
+    if tamil_count > 0:
+        return "Tamil"
 
     lower = text.lower()
     hindi_keywords = ["namaste", "aapka", "kya", "chahiye", "dukan", "samaan", "rupaye", "karna", "hai", "mujhe", "kitna"]
     telugu_keywords = ["namaskaram", "meeru", "kavali", "ento", "undi", "cheyandi", "ela", "nenu", "entha", "avunu"]
+    tamil_keywords = ["vanakkam", "enakku", "vendum", "evvalavu", "porutkal", "kadai", "seyyavendum"]
 
     if any(f" {w} " in f" {lower} " for w in hindi_keywords):
         return "Hindi"
     if any(f" {w} " in f" {lower} " for w in telugu_keywords):
         return "Telugu"
+    if any(re.search(rf"\b{re.escape(word)}\b", lower) for word in tamil_keywords):
+        return "Tamil"
 
     return fallback_lang
 
@@ -145,7 +151,8 @@ class LLMService:
 
     def _call_gemini(self, messages: List[Dict[str, str]], language: str, system_prompt: str) -> Optional[str]:
         model_name = self.gemini_model
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.gemini_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        headers = {"x-goog-api-key": self.gemini_key}
 
         gemini_contents = []
         for msg in messages:
@@ -166,8 +173,8 @@ class LLMService:
             }
         }
 
-        with httpx.Client(timeout=8.0) as client:
-            resp = client.post(url, json=payload)
+        with httpx.Client(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
+            resp = client.post(url, headers=headers, json=payload)
             if resp.status_code == 200:
                 data = resp.json()
                 candidates = data.get("candidates", [])
@@ -178,12 +185,27 @@ class LLMService:
                     parts = candidates[0].get("content", {}).get("parts", [])
                     if parts:
                         return parts[0].get("text", "").strip()
+                block_reason = data.get("promptFeedback", {}).get("blockReason")
+                logger.warning(
+                    "Gemini returned no usable candidates%s.",
+                    f" (block reason: {block_reason})" if block_reason else "",
+                )
             elif resp.status_code == 429:
                 logger.warning("Gemini API 429 Quota Exceeded. Backing off for 60 seconds.")
                 _rate_limited_until["gemini"] = time.time() + 60.0
                 return None
             else:
-                logger.error(f"Gemini API returned status {resp.status_code}: {resp.text}")
+                try:
+                    error_detail = resp.json().get("error", {}).get("message")
+                except ValueError:
+                    error_detail = None
+                if not error_detail:
+                    error_detail = resp.text[:500] or "No error details returned."
+                logger.error(
+                    "Gemini API returned status %s: %s",
+                    resp.status_code,
+                    error_detail,
+                )
                 return None
 
     def _call_groq(self, messages: List[Dict[str, str]], language: str, system_prompt: str) -> Optional[str]:
@@ -238,6 +260,8 @@ class LLMService:
                 return "समझ गया। आपके समय के लिए धन्यवाद! यदि आपको भविष्य में सहायता चाहिए तो कृपया हमसे संपर्क करें।"
             elif detected_lang == "Telugu":
                 return "అర్థమైంది. మీ సమయానికి ధన్యవాదాలు! భవిష్యత్తులో మీకు సహాయం అవసరమైతే మమ్మల్ని సంప్రదించండి."
+            elif detected_lang == "Tamil":
+                return "புரிந்துகொண்டேன். உங்கள் நேரத்திற்கு நன்றி! எதிர்காலத்தில் உதவி தேவைப்பட்டால் எங்களைத் தொடர்புகொள்ளுங்கள்."
             else:
                 return "Understood. Thank you so much for your time! Feel free to reach back out whenever you are ready."
 
@@ -250,6 +274,8 @@ class LLMService:
             and re.search(r"(?:\$|usd\b|dollars?\b)", latest_text, flags=re.IGNORECASE)
             and re.search(r"[\d,]+", latest_text)
         ):
+            if detected_lang == "Tamil":
+                return "அந்தத் தொகை டாலரில் இருப்பதாகப் புரிகிறது. திட்ட மதிப்பீடுகள் இந்திய ரூபாயில் இருப்பதால், அதற்கான ரூபாய் மதிப்பைத் தெரிவிக்க முடியுமா?"
             return (
                 "I heard that as a dollar amount. Since our project estimates are in INR, "
                 "could you share the INR equivalent?"
@@ -259,13 +285,65 @@ class LLMService:
             acknowledgments = {
                 "Hindi": "समझ गया।",
                 "Telugu": "అర్థమైంది.",
+                "Tamil": "புரிந்தது.",
                 "English": "Got it.",
             }
             return f"{acknowledgments.get(detected_lang, acknowledgments['English'])} {next_question}"
 
+        email = requirements.get("email")
+        follow_up_confirmed = bool(
+            re.search(r"\b(?:yes|yeah|yep|sure|okay|ok|absolutely|please do)\b", lower_input)
+            or any(word in lower_input for word in ("ஆம்", "ஆமாம்", "சரி", "நிச்சயமாக"))
+        )
+        follow_up_requested = follow_up_confirmed or any(
+            phrase in lower_input
+            for phrase in ("follow-up", "follow up", "followup", "arrange a follow-up", "தொடர்பு", "பின்தொடர்")
+        )
+        email_requested = any(
+            phrase in lower_input
+            for phrase in ("email", "e-mail", "mail", "forward", "send", "summary", "recap", "மின்னஞ்சல்", "அனுப்பு", "சுருக்கம்")
+        )
+
+        if email and (follow_up_requested or email_requested):
+            if detected_lang == "Hindi":
+                return f"धन्यवाद, मैंने {email} नोट कर लिया है। बातचीत समाप्त करें ताकि प्रोजेक्ट का सारांश इस पते पर भेजा जा सके।"
+            if detected_lang == "Telugu":
+                return f"ధన్యవాదాలు, {email} ను నమోదు చేశాను. సంభాషణను ముగించండి; ప్రాజెక్ట్ సారాంశాన్ని ఈ చిరునామాకు పంపిస్తాను."
+            if detected_lang == "Tamil":
+                return f"நன்றி, {email} முகவரியைப் பதிவு செய்துள்ளேன். உரையாடலை முடித்ததும் திட்டச் சுருக்கம் இந்த முகவரிக்கு அனுப்பப்படும்."
+            return (
+                f"Thanks, I've noted {email}. End the conversation to send the project "
+                "summary there. If delivery fails, it will remain in the Action Center."
+            )
+
+        if email_requested:
+            if detected_lang == "Hindi":
+                return "मुझे ईमेल पता स्पष्ट नहीं मिला। कृपया पूरा ईमेल पता टाइप करें; फिर बातचीत समाप्त करें ताकि सारांश भेजा जा सके।"
+            if detected_lang == "Telugu":
+                return "ఈమెయిల్ చిరునామా స్పష్టంగా అర్థం కాలేదు. దయచేసి పూర్తి చిరునామాను టైప్ చేయండి; తర్వాత సంభాషణను ముగిస్తే సారాంశాన్ని పంపిస్తాను."
+            if detected_lang == "Tamil":
+                return "மின்னஞ்சல் முகவரி தெளிவாகக் கிடைக்கவில்லை. முழு முகவரியையும் தட்டச்சு செய்யுங்கள்; உரையாடலை முடித்ததும் சுருக்கம் அனுப்பப்படும்."
+            return (
+                "I couldn't read the email address clearly. Please type the exact email "
+                "address; then end the conversation to send the project summary."
+            )
+
+        if follow_up_requested:
+            if detected_lang == "Hindi":
+                return "धन्यवाद, मैंने टीम से फॉलो-अप का आपका अनुरोध नोट कर लिया है। लिखित सारांश चाहिए तो ईमेल पता साझा करें।"
+            if detected_lang == "Telugu":
+                return "ధన్యవాదాలు, మీ ఫాలో-అప్ అభ్యర్థనను నమోదు చేశాను. వ్రాతపూర్వక సారాంశం కావాలంటే ఈమెయిల్ చిరునామా చెప్పండి."
+            if detected_lang == "Tamil":
+                return "நன்றி, உங்கள் பின்தொடர்பு கோரிக்கையைப் பதிவு செய்துள்ளேன். திட்டச் சுருக்கம் உங்கள் கணக்கு மின்னஞ்சலுக்கு அனுப்பப்படும்."
+            return (
+                "Thanks, I've noted your follow-up request. Share an email address if "
+                "you'd also like the project summary sent to you."
+            )
+
         return {
             "Hindi": "धन्यवाद, मैंने आपकी सभी आवश्यकताएँ नोट कर ली हैं। क्या आप चाहेंगे कि हमारी टीम आपके लिए अगला कदम तय करे?",
             "Telugu": "ధన్యవాదాలు, మీ అవసరాలన్నీ నమోదు చేశాను. తదుపరి దశ గురించి మా బృందం మీతో మాట్లాడాలా?",
+            "Tamil": "நன்றி, உங்கள் தேவைகளைப் பதிவு செய்துள்ளேன். அடுத்த படிகளைப் பற்றி எங்கள் குழு உங்களைத் தொடர்புகொள்ளட்டுமா?",
             "English": "Thanks, I have noted your requirements. Would you like me to arrange a follow-up with our team?",
         }.get(detected_lang, "Thanks, I have noted your requirements. Would you like me to arrange a follow-up with our team?")
 
@@ -292,6 +370,13 @@ class LLMService:
                 ("budget", "వెబ్‌సైట్ కోసం మీ అంచనా బడ్జెట్ ఎంత?"),
                 ("timeline", "మీరు స్టోర్‌ను ఎప్పటికి ప్రారంభించాలనుకుంటున్నారు?"),
                 ("features", "చెల్లింపులు, ఇన్వెంటరీ, WhatsApp అలర్ట్లు లేదా డెలివరీ ఇంటిగ్రేషన్ వంటి ఏ ఫీచర్లు కావాలి?"),
+            ],
+            "Tamil": [
+                ("business_type", "உங்கள் இணையக் கடையில் எந்த வகையான பொருட்களை விற்கத் திட்டமிட்டுள்ளீர்கள்?"),
+                ("product_count", "தொடக்கத்தில் எத்தனை தயாரிப்புகளை பட்டியலிடத் திட்டமிட்டுள்ளீர்கள்?"),
+                ("budget", "இணையதளத்திற்கான உங்கள் மதிப்பிடப்பட்ட பட்ஜெட் என்ன?"),
+                ("timeline", "கடையை எப்போது தொடங்க விரும்புகிறீர்கள்?"),
+                ("features", "பணம் செலுத்துதல், சரக்கு மேலாண்மை, WhatsApp அறிவிப்புகள் அல்லது டெலிவரி கண்காணிப்பு போன்ற எந்த அம்சங்கள் தேவை?"),
             ],
         }
         questions = prompts.get(language, prompts["English"])

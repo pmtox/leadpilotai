@@ -1,11 +1,16 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
+from backend.app.core.auth import require_admin
 from sqlalchemy.orm import Session
 from backend.app.database.connection import get_db
 from backend.app.models.customer import Customer
 from backend.app.schemas.customer import CustomerCreate, CustomerResponse
 
-router = APIRouter(prefix="/api/customers", tags=["customers"])
+router = APIRouter(
+    prefix="/api/customers",
+    tags=["customers"],
+    dependencies=[Depends(require_admin)],
+)
 
 @router.post("", response_model=CustomerResponse)
 def create_customer(customer_in: CustomerCreate, db: Session = Depends(get_db)):

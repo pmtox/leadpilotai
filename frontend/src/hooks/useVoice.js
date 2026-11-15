@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const LANGUAGE_CODES = {
   English: 'en-IN',
   Hindi: 'hi-IN',
-  Telugu: 'te-IN'
+  Telugu: 'te-IN',
+  Tamil: 'ta-IN'
 };
 
 function getRecordingError(error) {

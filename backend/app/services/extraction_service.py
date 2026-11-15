@@ -11,32 +11,32 @@ from backend.app.models.conversation import Conversation, Message
 from backend.app.models.lead import Lead
 from backend.app.models.action import Action
 from backend.app.core.prompts import EXTRACTION_SYSTEM_PROMPT
-from backend.app.services.llm_service import llm_service
+from backend.app.services.llm_service import detect_language, llm_service
 from backend.app.services.lead_scoring import lead_scoring_engine
 
 logger = logging.getLogger(__name__)
 
 BUSINESS_TYPES = {
-    "clothing": ["clothing", "cloth", "garment", "apparel", "fashion", "saree", "kurti", "t-shirt", "कपड़", "బట్ట"],
-    "electronics": ["electronic", "gadget", "phone", "laptop", "mobile", "इलेक्ट्रॉनिक", "ఎలక్ట్రానిక్స్"],
-    "grocery": ["grocer", "supermarket", "kirana", "किराना", "కిరాణా"],
-    "jewelry": ["jewel", "ornament", "gold", "silver", "गहन", "జ్యువెలరీ", "ఆభరణ"],
-    "footwear": ["footwear", "shoe", "sandal", "slipper", "जूत", "పాదరక్ష"],
-    "cosmetics": ["cosmetic", "skincare", "beauty", "makeup", "कॉस्मेटिक", "సౌందర్య"],
-    "bakery": ["baker", "cake", "pastr", "cookie", "बेकरी", "బేకరీ"],
-    "furniture": ["furniture", "sofa", "chair", "woodwork", "फर्नीचर", "ఫర్నిచర్"],
-    "handmade": ["handicraft", "handmade", "craft", "art", "हस्तशिल्प", "చేతివృత్తు"]
+    "clothing": ["clothing", "cloth", "garment", "apparel", "fashion", "saree", "kurti", "t-shirt", "कपड़", "బట్ట", "ஆடை", "உடை", "துணி"],
+    "electronics": ["electronic", "gadget", "phone", "laptop", "mobile", "इलेक्ट्रॉनिक", "ఎలక్ట్రానిక్స్", "மின்னணு", "எலக்ட்ரானிக்ஸ்"],
+    "grocery": ["grocer", "supermarket", "kirana", "किराना", "కిరాణా", "மளிகை"],
+    "jewelry": ["jewel", "ornament", "gold", "silver", "गहन", "జ్యువెలరీ", "ఆభరణ", "நகை"],
+    "footwear": ["footwear", "shoe", "sandal", "slipper", "जूत", "పాదరక్ష", "காலணி"],
+    "cosmetics": ["cosmetic", "skincare", "beauty", "makeup", "कॉस्मेटिक", "సౌందర్య", "அழகுசாதனம்"],
+    "bakery": ["baker", "cake", "pastr", "cookie", "बेकरी", "బేకరీ", "பேக்கரி"],
+    "furniture": ["furniture", "sofa", "chair", "woodwork", "फर्नीचर", "ఫర్నిచర్", "மரச்சாமான்கள்"],
+    "handmade": ["handicraft", "handmade", "craft", "art", "हस्तशिल्प", "చేతివృత్తు", "கைவினை"]
 }
 
 FEATURE_KEYWORDS = {
-    "Online Payments (UPI/Cards)": ["payment", "upi", "razorpay", "card", "पेमेंट", "యూపీఐ", "చెల్లింపు"],
-    "UPI Payments": ["upi"],
-    "Credit/Debit Card Payments": ["credit card", "debit card", "cards"],
+    "Online Payments (UPI/Cards)": ["payment", "upi", "razorpay", "card", "पेमेंट", "యూపీఐ", "చెల్లింపు", "பணம் செலுத்த", "கட்டணம்"],
+    "UPI Payments": ["upi", "யுபிஐ"],
+    "Credit/Debit Card Payments": ["credit card", "debit card", "cards", "கடன் அட்டை", "பற்று அட்டை"],
     "Razorpay Integration": ["razorpay"],
-    "Delivery Tracking": ["delivery", "shipping", "tracking", "courier", "डिलीवरी", "డెలివరీ"],
-    "Inventory Management": ["inventory", "stock", "स्टॉक", "ఇన్వెంటరీ"],
-    "WhatsApp Notifications": ["whatsapp", "sms", "notification", "alerts", "व्हाट्सएप", "వాట్సాప్"],
-    "Multi-currency / International": ["international", "export", "dollar", "nri"]
+    "Delivery Tracking": ["delivery", "shipping", "tracking", "courier", "डिलीवरी", "డెలివరీ", "டெலிவரி", "விநியோகம்", "கண்காணிப்பு"],
+    "Inventory Management": ["inventory", "stock", "स्टॉक", "ఇన్వెంటరీ", "சரக்கு", "இருப்பு"],
+    "WhatsApp Notifications": ["whatsapp", "sms", "notification", "alerts", "व्हाट्सएप", "వాట్సాప్", "அறிவிப்பு"],
+    "Multi-currency / International": ["international", "export", "dollar", "nri", "சர்வதேச", "ஏற்றுமதி"]
 }
 
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
@@ -79,37 +79,151 @@ class ExtractionService:
         full_customer_transcript = " ".join(customer_texts)
         rule_extracted = self._extract_with_rules(full_customer_transcript)
 
-        latest_customer_index = next(
-            (
-                index
-                for index in range(len(conversation_history) - 1, -1, -1)
-                if conversation_history[index].get("speaker") in ("customer", "user")
-            ),
-            None,
-        )
-        if latest_customer_index is None:
-            return rule_extracted
+        for customer_index, message in enumerate(conversation_history):
+            if message.get("speaker") not in ("customer", "user"):
+                continue
 
-        latest_customer_text = conversation_history[latest_customer_index].get("content", "").strip()
-        previous_agent_text = next(
-            (
-                message.get("content", "").lower()
-                for message in reversed(conversation_history[:latest_customer_index])
-                if message.get("speaker") == "agent"
-            ),
-            "",
-        )
+            previous_agent_text = next(
+                (
+                    previous.get("content", "").lower()
+                    for previous in reversed(conversation_history[:customer_index])
+                    if previous.get("speaker") == "agent"
+                ),
+                "",
+            )
+            answer = message.get("content", "").strip()
 
-        # A plain numeric answer is a budget when it directly answers the
-        # budget/INR clarification, even without a currency symbol or label.
-        if (
-            rule_extracted["budget"] is None
-            and re.fullmatch(r"\s*[\d,]+(?:\.\d+)?\s*", latest_customer_text)
-            and ("budget" in previous_agent_text or "inr" in previous_agent_text)
-        ):
-            rule_extracted.update(self._extract_budget(f"budget {latest_customer_text}"))
+            is_english_product_count_question = (
+                re.search(r"\b(?:how many|number of|quantity of|count of)\b", previous_agent_text)
+                and re.search(r"\b(?:products?|items?|catalog(?:ue)?|skus?)\b", previous_agent_text)
+            )
+            is_hindi_product_count_question = re.search(
+                r"(?:कितने|कितनी|कितना|संख्या|मात्रा).{0,40}(?:उत्पाद|वस्तु|आइटम|प्रोडक्ट)"
+                r"|(?:उत्पाद|वस्तु|आइटम|प्रोडक्ट).{0,40}(?:कितने|कितनी|कितना|संख्या|मात्रा)",
+                previous_agent_text,
+            )
+            is_tamil_product_count_question = re.search(
+                r"(?:எத்தனை|எவ்வளவு|எண்ணிக்கை).{0,40}(?:தயாரிப்ப|பொருட்கள்|பொருள்|உருப்படி)"
+                r"|(?:தயாரிப்ப|பொருட்கள்|பொருள்|உருப்படி).{0,40}(?:எத்தனை|எவ்வளவு|எண்ணிக்கை)",
+                previous_agent_text,
+            )
+            is_product_count_question = (
+                is_english_product_count_question
+                or is_hindi_product_count_question
+                or is_tamil_product_count_question
+            )
+            if is_product_count_question and "budget" not in previous_agent_text:
+                if re.fullmatch(r"\d{1,3}(?:,\d{3})+|\d+", answer):
+                    product_count = int(answer.replace(",", ""))
+                else:
+                    spoken_count = self._parse_spoken_number(answer)
+                    product_count = (
+                        int(spoken_count)
+                        if spoken_count is not None and spoken_count.is_integer()
+                        else None
+                    )
+                if product_count is not None and product_count > 0:
+                    rule_extracted["product_count"] = product_count
+
+            if any(
+                keyword in previous_agent_text
+                for keyword in ("budget", "inr", "பட்ஜெட்", "நிதி")
+            ):
+                answer_budget = self._extract_budget(f"budget {answer}")
+                if answer_budget.get("budget") is None:
+                    amount = self._parse_spoken_number(answer)
+                    answer_budget = (
+                        {"budget_min": amount, "budget_max": amount, "budget": amount}
+                        if amount is not None and amount > 500
+                        else None
+                    )
+                if answer_budget and answer_budget.get("budget") is not None:
+                    rule_extracted.update(answer_budget)
 
         return rule_extracted
+
+    @staticmethod
+    def _parse_spoken_number(text: str) -> Optional[float]:
+        number_words = {
+            "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4,
+            "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+            "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
+            "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
+            "eighteen": 18, "nineteen": 19, "twenty": 20, "thirty": 30,
+            "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70,
+            "eighty": 80, "ninety": 90,
+            "शून्य": 0, "शुन्य": 0, "एक": 1, "दो": 2, "तीन": 3,
+            "चार": 4, "पांच": 5, "पाँच": 5, "छह": 6, "छः": 6,
+            "सात": 7, "आठ": 8, "नौ": 9, "दस": 10, "ग्यारह": 11,
+            "बारह": 12, "तेरह": 13, "चौदह": 14, "पंद्रह": 15,
+            "पन्द्रह": 15, "सोलह": 16, "सत्रह": 17, "अठारह": 18,
+            "उन्नीस": 19, "बीस": 20, "तीस": 30, "चालीस": 40,
+            "पचास": 50, "साठ": 60, "सत्तर": 70, "अस्सी": 80,
+            "नब्बे": 90, "नव्वे": 90,
+            "ஒன்று": 1, "ஒரு": 1, "இரண்டு": 2, "மூன்று": 3,
+            "நான்கு": 4, "ஐந்து": 5, "ஆறு": 6, "ஏழு": 7,
+            "எட்டு": 8, "ஒன்பது": 9, "பத்து": 10, "பதினொன்று": 11,
+            "பன்னிரண்டு": 12, "பதின்மூன்று": 13, "பதினான்கு": 14,
+            "பதினைந்து": 15, "பதினாறு": 16, "பதினேழு": 17,
+            "பதினெட்டு": 18, "பத்தொன்பது": 19, "இருபது": 20,
+            "முப்பது": 30, "நாற்பது": 40, "ஐம்பது": 50,
+            "அறுபது": 60, "எழுபது": 70, "எண்பது": 80,
+            "தொண்ணூறு": 90, "ஐம்பதாயிரம்": 50_000,
+            "இருபதாயிரம்": 20_000, "முப்பதாயிரம்": 30_000,
+            "நாற்பதாயிரம்": 40_000, "அறுபதாயிரம்": 60_000,
+            "எழுபதாயிரம்": 70_000, "எண்பதாயிரம்": 80_000,
+            "தொண்ணூறாயிரம்": 90_000,
+        }
+        scales = {
+            "hundred": 100,
+            "thousand": 1_000,
+            "lakh": 100_000,
+            "lakhs": 100_000,
+            "lac": 100_000,
+            "lacs": 100_000,
+            "million": 1_000_000,
+            "crore": 10_000_000,
+            "crores": 10_000_000,
+            "सौ": 100,
+            "हजार": 1_000,
+            "हज़ार": 1_000,
+            "लाख": 100_000,
+            "करोड़": 10_000_000,
+            "करोड": 10_000_000,
+            "நூறு": 100,
+            "ஆயிரம்": 1_000,
+            "லட்சம்": 100_000,
+            "இலட்சம்": 100_000,
+            "கோடி": 10_000_000,
+        }
+        ignored = {
+            "about", "and", "approximately", "around", "budget", "inr",
+            "is", "only", "roughly", "rs", "rupee", "rupees",
+            "लगभग", "करीब", "सिर्फ", "रुपये", "रुपया", "है", "हैं",
+            "சுமார்", "தோராயமாக", "மட்டும்", "ரூபாய்", "ரூபா", "ஆகும்",
+        }
+        tokens = [
+            token
+            for token in re.findall(r"[a-z]+|[\u0900-\u097f]+|[\u0b80-\u0bff]+", text.lower())
+            if token not in ignored
+        ]
+        if len(tokens) > 1 and len(tokens) % 2 == 0:
+            midpoint = len(tokens) // 2
+            if tokens[:midpoint] == tokens[midpoint:]:
+                tokens = tokens[:midpoint]
+        if not tokens or any(token not in number_words and token not in scales for token in tokens):
+            return None
+
+        total = current = 0
+        for token in tokens:
+            if token in number_words:
+                current += number_words[token]
+            elif token == "hundred":
+                current = max(current, 1) * scales[token]
+            else:
+                total += max(current, 1) * scales[token]
+                current = 0
+        return float(total + current)
 
     def _extract_with_llm(
         self,
@@ -151,7 +265,7 @@ class ExtractionService:
             "timeline": None,
             "features": [],
             "buying_intent": "UNKNOWN",
-            "language": "English",
+            "language": detect_language(text),
             "email": None,
         }
 
@@ -165,12 +279,14 @@ class ExtractionService:
         count_pattern = r"(\d{1,3}(?:,\d{3})+|\d+)"
         prod_match = re.search(
             rf"{count_pattern}\s*(?:(?:project|catalog|store|total)\s+)?"
-            rf"(?:products?|items?|articles?|pieces?|skus?|उत्पाद|वस्तुएं|వస్తువులు)?",
+            rf"(?:products?|items?|articles?|pieces?|skus?|उत्पाद|वस्तुएं|వస్తువులు|"
+            rf"தயாரிப்புகள்?|பொருட்கள்?|உருப்படிகள்)?",
             lower,
         )
         prod_specific = re.search(
             rf"{count_pattern}\s*(?:(?:project|catalog|store|total)\s+)?"
-            rf"(?:products|items|skus|pieces|उत्पाद|वस्तु|వస్తువులు|వస్తు)",
+            rf"(?:products|items|skus|pieces|उत्पाद|वस्तु|వస్తువులు|వస్తు|"
+            rf"தயாரிப்புகள்|பொருட்கள்|உருப்படிகள்)",
             lower,
         )
         if prod_specific:
@@ -184,17 +300,17 @@ class ExtractionService:
         result.update(self._extract_budget(lower))
 
         # 4. Extract Timeline
-        if any(t in lower for t in ["next week", "within a week", "in a week", "this week", "one week", "अगले सप्ताह", "వచ్చే వారం"]):
+        if any(t in lower for t in ["next week", "within a week", "in a week", "this week", "one week", "अगले सप्ताह", "వచ్చే వారం", "அடுத்த வாரம்", "ஒரு வாரம்"]):
             result["timeline"] = "Next week"
-        elif any(t in lower for t in ["next month", "1 month", "अगले महीने", "వచ్చే నెల"]):
+        elif any(t in lower for t in ["next month", "1 month", "अगले महीने", "వచ్చే నెల", "அடுத்த மாதம்"]):
             result["timeline"] = "Next month"
-        elif any(t in lower for t in ["2 weeks", "two weeks", "दो हफ्ते", "రెండు వారాలు"]):
+        elif any(t in lower for t in ["2 weeks", "two weeks", "दो हफ्ते", "రెండు వారాలు", "இரண்டு வாரங்கள்"]):
             result["timeline"] = "2 weeks"
-        elif any(t in lower for t in ["immediately", "asap", "urgent", "तुरंत", "వెంటనే"]):
+        elif any(t in lower for t in ["immediately", "asap", "urgent", "तुरंत", "వెంటనే", "உடனடியாக"]):
             result["timeline"] = "Immediately"
-        elif any(t in lower for t in ["3 months", "next quarter", "3 महीने", "3 నెలలు"]):
+        elif any(t in lower for t in ["3 months", "next quarter", "3 महीने", "3 నెలలు", "மூன்று மாதங்கள்"]):
             result["timeline"] = "3 months"
-        elif any(t in lower for t in ["this month", "इसी महीने", "ఈ నెల"]):
+        elif any(t in lower for t in ["this month", "इसी महीने", "ఈ నెల", "இந்த மாதம்"]):
             result["timeline"] = "This month"
 
         # 5. Extract Features
@@ -236,7 +352,7 @@ class ExtractionService:
     @classmethod
     def _extract_budget(cls, text: str) -> Dict[str, Optional[float]]:
         amount = r"\d+(?:,\d{2,3})*(?:\.\d+)?"
-        unit = r"(?:lakhs?|lacs?|lac|लाख|లక్ష|l|k|thousand)?"
+        unit = r"(?:lakhs?|lacs?|lac|लाख|లక్ష|லட்சம்|லட்சங்கள்|இலட்சம்|இலட்சங்கள்|l|k|thousand)?"
         prefix = r"(?:₹|rs\.?|inr)?\s*"
         range_match = re.search(
             rf"{prefix}(?P<low>{amount})\s*(?P<low_unit>{unit})\s*"
@@ -257,12 +373,12 @@ class ExtractionService:
                 return {"budget_min": low, "budget_max": high, "budget": (low + high) / 2}
 
         labeled_match = re.search(
-            rf"(?:₹|rs\.?|inr|budget(?:\s+is|\s+of)?|बजट|బడ్జెట్)\s*[:=]?\s*"
+            rf"(?:₹|rs\.?|inr|budget(?:\s+is|\s+of)?|बजट|బడ్జెట్|பட்ஜெட்|நிதி)\s*[:=]?\s*"
             rf"(?P<amount>{amount})\s*(?P<unit>{unit})",
             text,
         )
         single_match = labeled_match or re.search(
-            rf"(?P<amount>{amount})\s*(?P<unit>lakhs?|lacs?|lac|लाख|లక్ష|l|k|thousand)\b",
+            rf"(?P<amount>{amount})\s*(?P<unit>lakhs?|lacs?|lac|लाख|లక్ష|லட்சம்|லட்சங்கள்|இலட்சம்|இலட்சங்கள்|l|k|thousand)\b",
             text,
         )
         if single_match:
@@ -285,7 +401,7 @@ class ExtractionService:
         normalized_unit = (unit or "").lower()
         if normalized_unit in {"k", "thousand"}:
             amount *= 1_000
-        elif normalized_unit in {"l", "lac", "lacs", "lakh", "lakhs", "लाख", "లక్ష"}:
+        elif normalized_unit in {"l", "lac", "lacs", "lakh", "lakhs", "लाख", "లక్ష", "லட்சம்", "லட்சங்கள்", "இலட்சம்", "இலட்சங்கள்"}:
             amount *= 100_000
         return amount
 
@@ -348,7 +464,7 @@ class ExtractionService:
             new_intent = extracted["buying_intent"].upper()
             if new_intent == "HIGH" or intent_rank.get(new_intent, 0) > intent_rank.get(current_intent, 0):
                 lead.buying_intent = new_intent
-        if extracted.get("email") and conv.customer:
+        if extracted.get("email") and conv.customer and conv.customer.user_id is None:
             conv.customer.email = extracted["email"]
 
         # Run Lead Qualification Engine

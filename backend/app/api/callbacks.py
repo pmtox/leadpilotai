@@ -1,10 +1,15 @@
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from backend.app.core.auth import require_admin
 from backend.app.database.connection import get_db
 from backend.app.models.action import Action
 
-router = APIRouter(prefix="/api/callbacks", tags=["callbacks"])
+router = APIRouter(
+    prefix="/api/callbacks",
+    tags=["callbacks"],
+    dependencies=[Depends(require_admin)],
+)
 
 @router.get("")
 def list_callbacks(db: Session = Depends(get_db)):
